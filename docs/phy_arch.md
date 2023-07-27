@@ -33,8 +33,6 @@
 ## RX
 
 * Required pre-amp?
-* Sensitivity spec?
-* Timing aperture spec?
 * Equalization?
 * Offset correction?
 
