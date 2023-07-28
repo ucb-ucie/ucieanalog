@@ -1,14 +1,10 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+use substrate::Io;
+use substrate::io::{InOut, Signal};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod vco;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+#[derive(Debug, Default, Copy, Clone, Io)]
+pub struct PowerIo {
+    pub vdd: InOut<Signal>,
+    pub vss: InOut<Signal>,
 }
