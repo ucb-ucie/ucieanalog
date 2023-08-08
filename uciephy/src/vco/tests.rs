@@ -4,6 +4,7 @@ use substrate::pdk::corner::Pvt;
 
 use crate::paths::get_path;
 use crate::sky130_commercial_ctx;
+use crate::vco::DelayCellTuningRange;
 
 use super::{CurrentStarvedInverter, DelayCellTb};
 
@@ -22,6 +23,29 @@ fn current_starved_inverter_delay() {
             get_path("current_starved_inverter_delay", "sim/"),
         )
         .expect("failed to run simulation");
+
+    println!("Output: {output:?}");
+}
+
+#[test]
+fn current_starved_inverter_delay_range() {
+    let test_name = "current_starved_inverter_delay_range";
+    let ctx = sky130_commercial_ctx();
+    let handle = ctx.cache.get_with_state(
+        test_name,
+        DelayCellTuningRange {
+            dut: CurrentStarvedInverter,
+            pvt: Pvt::new(Sky130Corner::Tt, dec!(1.8), dec!(25)),
+            vtune_min: dec!(0.6),
+            vtune_max: dec!(1.8),
+            num_points: 41,
+            tr: dec!(2e-12),
+            tf: dec!(2e-12),
+            work_dir: get_path(test_name, "sims"),
+        },
+        ctx.clone(),
+    );
+    let output = handle.get().as_ref().unwrap();
 
     println!("Output: {output:?}");
 }
