@@ -8,10 +8,12 @@ repository = "https://github.com/ucb-ucie/ucie"
 license = "BSD-3-Clause"
 
 [dependencies]
-substrate = { version = "0.6.0", registry = "substrate" }
-spectre = { version = "0.6.0", registry = "substrate" }
-sky130pdk = { version = "0.6.0", registry = "substrate" }
+substrate = { version = "0.6.1", registry = "substrate" }
+spectre = { version = "0.6.1", registry = "substrate" }
+sky130pdk = { version = "0.6.1", registry = "substrate" }
+cache = { version = "*", registry = "substrate" }
 
 serde = { version = "1", features = ["derive"] }
+itertools = "0.11"
 rust_decimal = "1.30"
 rust_decimal_macros = "1.30"

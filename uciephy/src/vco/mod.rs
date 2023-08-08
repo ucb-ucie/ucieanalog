@@ -1,8 +1,11 @@
+use std::path::PathBuf;
+
 use crate::PowerIo;
+use cache::CacheableWithState;
+use itertools::Itertools;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use serde::{Deserialize, Serialize};
 use sky130pdk::corner::Sky130Corner;
 use sky130pdk::mos::{Nfet01v8, Pfet01v8};
 use sky130pdk::Sky130CommercialPdk;
@@ -11,10 +14,13 @@ use spectre::tran::{Tran, TranTime, TranVoltage};
 use spectre::{Options, Spectre};
 use substrate::arcstr::{self, ArcStr};
 use substrate::block::Block;
+use substrate::context::Context;
 use substrate::io::Io;
 use substrate::io::{Input, Node, Output, SchematicType, Signal, TestbenchIo};
 use substrate::pdk::corner::Pvt;
+use substrate::pdk::Pdk;
 use substrate::schematic::{Cell, CellBuilder, HasSchematic, HasSchematicData, SimCellBuilder};
+use substrate::serde::{Deserialize, Serialize};
 use substrate::simulation::data::FromSaved;
 use substrate::simulation::waveform::{EdgeDir, TimeWaveform, WaveformRef};
 use substrate::simulation::{HasSimSchematic, SimController, Testbench};
@@ -30,6 +36,7 @@ pub struct VcoIo {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Block)]
+#[serde(crate = "substrate::serde")]
 #[substrate(io = "VcoIo")]
 pub struct Vco {
     pub fmin: Decimal,
@@ -49,6 +56,7 @@ pub struct DelayCellIo {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Block)]
+#[serde(crate = "substrate::serde")]
 #[substrate(io = "DelayCellIo")]
 pub struct CurrentStarvedInverter;
 
@@ -87,9 +95,11 @@ impl HasSchematic<Sky130CommercialPdk> for CurrentStarvedInverter {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(crate = "substrate::serde")]
 pub struct DelayCellTb<T> {
     pub dut: T,
     pub pvt: Pvt<Sky130Corner>,
+    pub vtune: Decimal,
     pub tr: Decimal,
     pub tf: Decimal,
 }
@@ -131,7 +141,7 @@ where
         cell.connect(vdd.io().n, io.vss);
         cell.connect(io.vss, dut.io().pwr.vss);
 
-        let vtune = cell.instantiate_tb(Vsource::dc(dec!(0.0)));
+        let vtune = cell.instantiate_tb(Vsource::dc(self.vtune));
         cell.connect(vtune.io().p, dut.io().tune);
         cell.connect(vtune.io().n, io.vss);
 
@@ -169,12 +179,14 @@ impl<T: Block> substrate::simulation::data::Save<Spectre, Tran, &Cell<DelayCellT
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
+#[serde(crate = "substrate::serde")]
 pub struct DelayCellTbSaved {
     time: TranTime,
     vout: TranVoltage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
+#[serde(crate = "substrate::serde")]
 pub struct DelayCellTbOutput {
     td_hl: f64,
     td_lh: f64,
@@ -209,5 +221,77 @@ where
         let td_lh = rising.t() - 2e-9 - self.tf.to_f64().unwrap() / 2.0;
 
         DelayCellTbOutput { td_hl, td_lh }
+    }
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(crate = "substrate::serde")]
+pub struct DelayCellTuningRange<T> {
+    pub dut: T,
+    pub pvt: Pvt<Sky130Corner>,
+    pub vtune_min: Decimal,
+    pub vtune_max: Decimal,
+    pub num_points: usize,
+    pub tr: Decimal,
+    pub tf: Decimal,
+    pub work_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(crate = "substrate::serde")]
+pub struct TuningRange {
+    td_hl_min: f64,
+    td_hl_max: f64,
+    td_lh_min: f64,
+    td_lh_max: f64,
+}
+
+impl<T, PDK: Pdk> CacheableWithState<Context<PDK>> for DelayCellTuningRange<T>
+where
+    DelayCellTb<T>: Testbench<PDK, Spectre, Output = DelayCellTbOutput>,
+    T: Clone + Block,
+{
+    type Output = TuningRange;
+    type Error = ();
+    fn generate_with_state(
+        &self,
+        ctx: Context<PDK>,
+    ) -> std::result::Result<Self::Output, Self::Error> {
+        assert!(self.num_points > 1);
+        let incr: Decimal = (self.vtune_max - self.vtune_min) / Decimal::from(self.num_points - 1);
+        let outputs = (0..self.num_points)
+            .map(|i| {
+                let work_dir = self.work_dir.join(format!("sim{i}/"));
+                ctx.simulate(
+                    DelayCellTb {
+                        dut: self.dut.clone(),
+                        pvt: self.pvt,
+                        vtune: self.vtune_min + Decimal::from(i) * incr,
+                        tr: self.tr,
+                        tf: self.tf,
+                    },
+                    work_dir,
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let (td_hl_min, td_hl_max) = outputs
+            .iter()
+            .map(|o| o.td_hl)
+            .minmax()
+            .into_option()
+            .unwrap();
+        let (td_lh_min, td_lh_max) = outputs
+            .iter()
+            .map(|o| o.td_lh)
+            .minmax()
+            .into_option()
+            .unwrap();
+        Ok(Self::Output {
+            td_hl_min,
+            td_hl_max,
+            td_lh_min,
+            td_lh_max,
+        })
     }
 }

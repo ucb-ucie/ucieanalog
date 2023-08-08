@@ -518,9 +518,9 @@ checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 
 [[package]]
 name = "codegen"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/substrate-labs/crates-index"
-checksum = "8f1025ecb459b3da46cd812435f3c584c2dbd27b69bea52e0e1380242ff25eb7"
+checksum = "557b273101f0bad1ea71fb4f8dc272399a7ac34e10da3702ab253052e25106ac"
 dependencies = [
  "convert_case 0.6.0",
  "darling 0.20.3",
@@ -814,9 +814,9 @@ dependencies = [
 
 [[package]]
 name = "examples"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/substrate-labs/crates-index"
-checksum = "0e894f14f3adbf7e707fe764fbe49219ec90d8355083aa4a7100b778cf9d40ea"
+checksum = "c1918fbbda2faab39bff15225ae18ccb3708f9c6e664b54a70022f5bb184fdde"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro-error",
@@ -2198,9 +2198,9 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 
 [[package]]
 name = "sky130pdk"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/substrate-labs/crates-index"
-checksum = "d79827cd1640880a041ade401652eb25b9678e076ab1c65a9343c1b50387e2a9"
+checksum = "be5147b696035ebcfa52d29a9cb577db7da6b33a07a0c9b399bed64b915ee22f"
 dependencies = [
  "arcstr",
  "rust_decimal",
@@ -2261,9 +2261,9 @@ dependencies = [
 
 [[package]]
 name = "spectre"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/substrate-labs/crates-index"
-checksum = "da5d811613e1ab68ac039b558d2985ceda00f0ae005fbf4b7d8b6c6990d486ed"
+checksum = "4b89c918e9e952856a347c906a8745c526ddf76d69e0c2c04390bd1547def4d9"
 dependencies = [
  "arcstr",
  "cache",
@@ -2302,9 +2302,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "substrate"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/substrate-labs/crates-index"
-checksum = "f45f07b27e62e7d9e567c0c274f06b8a5c7778bc244187011d3403c8ea644fac"
+checksum = "d0d15032d9154f941b905e9d760acafc3d5931e08e885a8dbc5282f26df37cf0"
 dependencies = [
  "anyhow",
  "arcstr",
@@ -2775,6 +2775,8 @@ checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 name = "uciephy"
 version = "0.0.0"
 dependencies = [
+ "cache",
+ "itertools 0.11.0",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",

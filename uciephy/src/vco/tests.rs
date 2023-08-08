@@ -15,6 +15,7 @@ fn current_starved_inverter_delay() {
             DelayCellTb {
                 dut: CurrentStarvedInverter,
                 pvt: Pvt::new(Sky130Corner::Tt, dec!(1.8), dec!(25)),
+                vtune: dec!(1.8),
                 tr: dec!(2e-12),
                 tf: dec!(2e-12),
             },
