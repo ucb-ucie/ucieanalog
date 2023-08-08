@@ -393,8 +393,9 @@ checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
 
 [[package]]
 name = "cache"
-version = "0.3.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.3.1"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "2812fb1e86dd587b9690522af55d4c80001a21d56e23699606135268b7d2244a"
 dependencies = [
  "backoff",
  "clap",
@@ -517,8 +518,9 @@ checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 
 [[package]]
 name = "codegen"
-version = "0.5.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.6.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "8f1025ecb459b3da46cd812435f3c584c2dbd27b69bea52e0e1380242ff25eb7"
 dependencies = [
  "convert_case 0.6.0",
  "darling 0.20.3",
@@ -539,8 +541,9 @@ checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
 name = "config"
-version = "0.2.2"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.2.3"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "18804a849fdcd0d764a6d870e0b85de799cec2cffe060dfe6a4ba80008e294e9"
 dependencies = [
  "anyhow",
  "cache",
@@ -733,8 +736,9 @@ checksum = "850878694b7933ca4c9569d30a34b55031b9b139ee1fc7b94a527c4ef960d690"
 
 [[package]]
 name = "diagnostics"
-version = "0.2.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.3.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "6679a8fd51905c642fb2183bc3d25992796b05a24f1ed5f6f4ba0d9b14e6a46d"
 dependencies = [
  "serde",
  "tracing",
@@ -810,8 +814,9 @@ dependencies = [
 
 [[package]]
 name = "examples"
-version = "0.2.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.3.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "0e894f14f3adbf7e707fe764fbe49219ec90d8355083aa4a7100b778cf9d40ea"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro-error",
@@ -943,7 +948,8 @@ dependencies = [
 [[package]]
 name = "gds"
 version = "0.3.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "fd62e18551e71d79f3599cb88d12bdac4e74f85f136ec6679356dda1b0e1dbc6"
 dependencies = [
  "arcstr",
  "byteorder",
@@ -972,8 +978,9 @@ dependencies = [
 
 [[package]]
 name = "geometry"
-version = "0.3.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.4.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "db60cb48d484a8991ba7c6284cb28598ab11e212da03b3d39bdd12ae94713849"
 dependencies = [
  "approx",
  "array_map",
@@ -984,8 +991,9 @@ dependencies = [
 
 [[package]]
 name = "geometry_macros"
-version = "0.0.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.0.1"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "7181c3d566453c77c75296de2e5aeac6a81954bb2a57e645ad6f4da953ec1dd1"
 dependencies = [
  "darling 0.20.3",
  "proc-macro-crate 1.3.1",
@@ -1505,7 +1513,8 @@ checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
 [[package]]
 name = "opacity"
 version = "0.1.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "4c8410497f3d2487bb702f5862fa13e7d7f444c5864a7d42c7be4e4f4c1c3721"
 dependencies = [
  "serde",
 ]
@@ -1546,7 +1555,8 @@ dependencies = [
 [[package]]
 name = "pathtree"
 version = "0.2.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "1c99d04ee8013e48c4a559c59223929eb6c3fa9cf9bad0b7b23117d4f27c9d2f"
 
 [[package]]
 name = "percent-encoding"
@@ -2066,8 +2076,9 @@ dependencies = [
 
 [[package]]
 name = "scir"
-version = "0.4.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.5.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "b15bd7af692818bd04b8d29e894e848fb041a3c0a436307cb1a6b5eb1510914d"
 dependencies = [
  "arcstr",
  "diagnostics",
@@ -2187,8 +2198,9 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 
 [[package]]
 name = "sky130pdk"
-version = "0.5.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.6.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "d79827cd1640880a041ade401652eb25b9678e076ab1c65a9343c1b50387e2a9"
 dependencies = [
  "arcstr",
  "rust_decimal",
@@ -2249,8 +2261,9 @@ dependencies = [
 
 [[package]]
 name = "spectre"
-version = "0.5.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.6.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "da5d811613e1ab68ac039b558d2985ceda00f0ae005fbf4b7d8b6c6990d486ed"
 dependencies = [
  "arcstr",
  "cache",
@@ -2269,8 +2282,9 @@ dependencies = [
 
 [[package]]
 name = "spice"
-version = "0.3.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.4.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "7aee18df5ea725579392798b9c3023343676b45028fcc0985dbc77b42cb6fead"
 dependencies = [
  "arcstr",
  "nom",
@@ -2288,8 +2302,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "substrate"
-version = "0.5.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.6.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "f45f07b27e62e7d9e567c0c274f06b8a5c7778bc244187011d3403c8ea644fac"
 dependencies = [
  "anyhow",
  "arcstr",
@@ -2717,8 +2732,9 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "type_dispatch"
-version = "0.2.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.3.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "42b95b55b4c53404406a0f3ce9cfcfd25b28d6760f822a7ac9466c7608f33f94"
 dependencies = [
  "darling 0.20.3",
  "duplicate",
@@ -2730,8 +2746,9 @@ dependencies = [
 
 [[package]]
 name = "type_dispatch_macros"
-version = "0.2.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+version = "0.3.0"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "30619d1f6261cb23685dad0c028690301e4ca9bdd8459b1171b9f1aacf4a3901"
 dependencies = [
  "darling 0.20.3",
  "itertools 0.11.0",
@@ -2852,7 +2869,8 @@ checksum = "c0edd1e5b14653f783770bce4a4dabb4a5108a5370a5f5d8cfe8710c361f6c8b"
 [[package]]
 name = "uniquify"
 version = "0.2.0"
-source = "git+https://github.com/substrate-labs/substrate2#e7e45cc3262e04a7cb23e5245e8e5f461c469c63"
+source = "registry+https://github.com/substrate-labs/crates-index"
+checksum = "1157d1decfed11f3159e833b3b50b7a93312a5aa8a2c29300f9171c286c761ba"
 dependencies = [
  "arcstr",
  "serde",
