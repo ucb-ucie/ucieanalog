@@ -4,7 +4,7 @@ use substrate::pdk::corner::Pvt;
 
 use crate::paths::get_path;
 use crate::sky130_commercial_ctx;
-use crate::vco::DelayCellTuningRange;
+use crate::vco::{DelayCellTuningRange, RingOscillator, VcoTb};
 
 use super::{CurrentStarvedInverter, DelayCellTb};
 
@@ -46,6 +46,26 @@ fn current_starved_inverter_delay_range() {
         ctx.clone(),
     );
     let output = handle.get().as_ref().unwrap();
+
+    println!("Output: {output:?}");
+}
+
+#[test]
+fn current_starved_ro_period() {
+    let test_name = "current_starved_ro_period";
+    let ctx = sky130_commercial_ctx();
+    let output = ctx
+        .simulate(
+            VcoTb {
+                vco: RingOscillator::new(7, CurrentStarvedInverter),
+                pvt: Pvt::new(Sky130Corner::Tt, dec!(1.8), dec!(25)),
+                vtune: dec!(1.8),
+                sim_time: dec!(50e-9),
+                c_load: dec!(0.5e-15),
+            },
+            get_path(test_name, "sim/"),
+        )
+        .unwrap();
 
     println!("Output: {output:?}");
 }

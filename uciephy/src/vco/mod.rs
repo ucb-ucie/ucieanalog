@@ -6,6 +6,7 @@ use itertools::Itertools;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use serde::{Deserialize, Serialize};
 use sky130pdk::corner::Sky130Corner;
 use sky130pdk::mos::{Nfet01v8, Pfet01v8};
 use sky130pdk::Sky130CommercialPdk;
@@ -15,12 +16,12 @@ use spectre::{Options, Spectre};
 use substrate::arcstr::{self, ArcStr};
 use substrate::block::Block;
 use substrate::context::Context;
-use substrate::io::Io;
+use substrate::io::{Array, Io};
 use substrate::io::{Input, Node, Output, SchematicType, Signal, TestbenchIo};
 use substrate::pdk::corner::Pvt;
 use substrate::pdk::Pdk;
+use substrate::schematic::primitives::Capacitor;
 use substrate::schematic::{Cell, CellBuilder, HasSchematic, HasSchematicData, SimCellBuilder};
-use substrate::serde::{Deserialize, Serialize};
 use substrate::simulation::data::FromSaved;
 use substrate::simulation::waveform::{EdgeDir, TimeWaveform, WaveformRef};
 use substrate::simulation::{HasSimSchematic, SimController, Testbench};
@@ -35,10 +36,12 @@ pub struct VcoIo {
     pub pwr: PowerIo,
 }
 
+pub trait Vco: Block<Io = VcoIo> {}
+impl<T: Block<Io = VcoIo>> Vco for T {}
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Block)]
-#[serde(crate = "substrate::serde")]
 #[substrate(io = "VcoIo")]
-pub struct Vco {
+pub struct VcoParams {
     pub fmin: Decimal,
     pub fmax: Decimal,
     pub jitter: Decimal,
@@ -56,7 +59,6 @@ pub struct DelayCellIo {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Block)]
-#[serde(crate = "substrate::serde")]
 #[substrate(io = "DelayCellIo")]
 pub struct CurrentStarvedInverter;
 
@@ -95,7 +97,6 @@ impl HasSchematic<Sky130CommercialPdk> for CurrentStarvedInverter {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(crate = "substrate::serde")]
 pub struct DelayCellTb<T> {
     pub dut: T,
     pub pvt: Pvt<Sky130Corner>,
@@ -163,9 +164,7 @@ where
     }
 }
 
-impl<T: Block> substrate::simulation::data::Save<Spectre, Tran, &Cell<DelayCellTb<T>>>
-    for DelayCellTbSaved
-{
+impl<T: Block> substrate::simulation::data::Save<Spectre, Tran, &Cell<DelayCellTb<T>>> for Vout {
     fn save(
         ctx: &substrate::simulation::SimulationContext,
         cell: &Cell<DelayCellTb<T>>,
@@ -178,15 +177,34 @@ impl<T: Block> substrate::simulation::data::Save<Spectre, Tran, &Cell<DelayCellT
     }
 }
 
+impl<V: Vco> substrate::simulation::data::Save<Spectre, Tran, &Cell<VcoTb<V>>> for Vout {
+    fn save(
+        ctx: &substrate::simulation::SimulationContext,
+        cell: &Cell<VcoTb<V>>,
+        opts: &mut <Spectre as substrate::simulation::Simulator>::Options,
+    ) -> Self::Key {
+        Self::Key {
+            time: TranTime::save(ctx, cell, opts),
+            vout: TranVoltage::save(ctx, cell.data(), opts),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
-#[serde(crate = "substrate::serde")]
-pub struct DelayCellTbSaved {
+pub struct Vout {
     time: TranTime,
     vout: TranVoltage,
 }
 
+impl Vout {
+    /// Returns the output voltage waveform as a [`WaveformRef`].
+    #[inline]
+    pub fn as_waveform(&self) -> WaveformRef {
+        WaveformRef::new(&self.time, &self.vout)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
-#[serde(crate = "substrate::serde")]
 pub struct DelayCellTbOutput {
     td_hl: f64,
     td_lh: f64,
@@ -199,10 +217,10 @@ where
 {
     type Output = DelayCellTbOutput;
     fn run(&self, sim: SimController<Sky130CommercialPdk, Spectre, Self>) -> Self::Output {
-        let wavs: DelayCellTbSaved = sim
+        let wavs: Vout = sim
             .simulate(
                 Options::default(),
-                Some(&Sky130Corner::Tt),
+                Some(&self.pvt.corner),
                 Tran {
                     stop: dec!(3e-9),
                     errpreset: Some(spectre::ErrPreset::Conservative),
@@ -225,7 +243,6 @@ where
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(crate = "substrate::serde")]
 pub struct DelayCellTuningRange<T> {
     pub dut: T,
     pub pvt: Pvt<Sky130Corner>,
@@ -238,7 +255,6 @@ pub struct DelayCellTuningRange<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(crate = "substrate::serde")]
 pub struct TuningRange {
     td_hl_min: f64,
     td_hl_max: f64,
@@ -293,5 +309,152 @@ where
             td_lh_min,
             td_lh_max,
         })
+    }
+}
+
+/// A ring oscillator.
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Block)]
+#[substrate(io = "VcoIo")]
+pub struct RingOscillator<E> {
+    stages: usize,
+    element: E,
+}
+
+impl<E> RingOscillator<E> {
+    /// Create a new ring oscillator by repeating the given element.
+    ///
+    /// Stages must be an odd integer.
+    #[inline]
+    pub fn new(stages: usize, element: E) -> Self {
+        assert_eq!(
+            stages % 2,
+            1,
+            "ring oscillator must have an odd number of stages"
+        );
+        Self { stages, element }
+    }
+}
+
+impl<E: Block> HasSchematicData for RingOscillator<E> {
+    type Data = ();
+}
+
+impl<E, PDK> HasSchematic<PDK> for RingOscillator<E>
+where
+    E: Clone + HasSchematic<PDK> + Block<Io = DelayCellIo>,
+    PDK: Pdk,
+{
+    fn schematic(
+        &self,
+        io: &<<Self as Block>::Io as SchematicType>::Bundle,
+        cell: &mut CellBuilder<PDK, Self>,
+    ) -> substrate::error::Result<Self::Data> {
+        let nodes = cell.signal("nodes", Array::new(self.stages, Signal));
+        cell.connect(nodes[self.stages - 1], io.out);
+
+        for i in 0..self.stages {
+            let input = if i == 0 {
+                nodes[self.stages - 1]
+            } else {
+                nodes[i - 1]
+            };
+            let output = nodes[i];
+            let elt = cell.instantiate(self.element.clone());
+            cell.connect(&elt.io().pwr, &io.pwr);
+            cell.connect(elt.io().input, input);
+            cell.connect(elt.io().output, output);
+            cell.connect(elt.io().tune, io.tune);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Block)]
+#[substrate(io = "TestbenchIo")]
+pub struct VcoTb<V> {
+    pub vco: V,
+    pub pvt: Pvt<Sky130Corner>,
+    pub vtune: Decimal,
+    pub sim_time: Decimal,
+    pub c_load: Decimal,
+}
+
+impl<V: Vco> HasSchematicData for VcoTb<V> {
+    type Data = Node;
+}
+
+impl<V, PDK> HasSimSchematic<PDK, Spectre> for VcoTb<V>
+where
+    V: Vco + Clone + HasSchematic<PDK>,
+    PDK: Pdk,
+{
+    fn schematic(
+        &self,
+        io: &<<Self as Block>::Io as SchematicType>::Bundle,
+        cell: &mut SimCellBuilder<PDK, Spectre, Self>,
+    ) -> substrate::error::Result<Self::Data> {
+        let dut = cell.instantiate(self.vco.clone());
+
+        let vdd = cell.instantiate_tb(Vsource::dc(self.pvt.voltage));
+        cell.connect(vdd.io().p, dut.io().pwr.vdd);
+        cell.connect(vdd.io().n, io.vss);
+        cell.connect(io.vss, dut.io().pwr.vss);
+
+        let vtune = cell.instantiate_tb(Vsource::dc(self.vtune));
+        cell.connect(vtune.io().p, dut.io().tune);
+        cell.connect(vtune.io().n, io.vss);
+
+        let c_load = cell.instantiate(Capacitor::new(self.c_load));
+        cell.connect(c_load.io().p, dut.io().out);
+        cell.connect(c_load.io().n, io.vss);
+
+        Ok(dut.io().out)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
+pub struct VcoTbOutput {
+    period: f64,
+}
+
+impl VcoTbOutput {
+    /// The period of the VCO output.
+    #[inline]
+    pub fn period(&self) -> f64 {
+        self.period
+    }
+    /// The frequency of the VCO output.
+    #[inline]
+    pub fn freq(&self) -> f64 {
+        1f64 / self.period
+    }
+}
+
+impl<V> Testbench<Sky130CommercialPdk, Spectre> for VcoTb<V>
+where
+    V: Vco + Clone + HasSchematic<Sky130CommercialPdk>,
+{
+    type Output = VcoTbOutput;
+    fn run(&self, sim: SimController<Sky130CommercialPdk, Spectre, Self>) -> Self::Output {
+        let wavs: Vout = sim
+            .simulate(
+                Options::default(),
+                Some(&self.pvt.corner),
+                Tran {
+                    stop: self.sim_time,
+                    errpreset: Some(spectre::ErrPreset::Conservative),
+                    ..Default::default()
+                },
+            )
+            .expect("failed to run simulation");
+        let wav = wavs.as_waveform();
+        let (sum, n) = wav
+            .edges(self.pvt.voltage.to_f64().unwrap() / 2.0)
+            .map(|e| e.t())
+            .tuple_windows()
+            .map(|(a, b)| (b - a, 1))
+            .fold((0.0, 0), |acc, x| (acc.0 + x.0, acc.1 + x.1));
+        let period = sum / n as f64;
+        VcoTbOutput { period }
     }
 }
