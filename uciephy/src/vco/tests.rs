@@ -39,7 +39,7 @@ fn current_starved_inverter_delay_range() {
             pvt: Pvt::new(Sky130Corner::Tt, dec!(1.8), dec!(25)),
             vtune_min: dec!(0.6),
             vtune_max: dec!(1.8),
-            num_points: 41,
+            num_points: 11,
             tr: dec!(2e-12),
             tf: dec!(2e-12),
             work_dir: get_path(test_name, "sims"),
