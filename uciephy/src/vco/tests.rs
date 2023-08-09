@@ -1,6 +1,7 @@
 use rust_decimal_macros::dec;
 use sky130pdk::corner::Sky130Corner;
 use substrate::pdk::corner::Pvt;
+use test_log::test;
 
 use crate::paths::get_path;
 use crate::sky130_commercial_ctx;

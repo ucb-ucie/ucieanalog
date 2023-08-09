@@ -17,3 +17,9 @@ serde = { version = "1", features = ["derive"] }
 itertools = "0.11"
 rust_decimal = "1.30"
 rust_decimal_macros = "1.30"
+
+[dev-dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+test-log = { version = "0.2", default-features = false, features = ["trace"] }
+
