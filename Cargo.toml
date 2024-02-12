@@ -1,0 +1,20 @@
+[package]
+name = "uciephy"
+version = "0.0.0"
+edition = "2021"
+authors = ["Rahul Kumar <rahulkumar@berkeley.edu>", "Rohan Kumar <rohankumar@berkeley.edu>"]
+description = "An open-source UCIe implementation developed at UC Berkeley"
+repository = "https://github.com/ucb-ucie/ucie"
+license = "BSD-3-Clause"
+
+[dependencies]
+substrate = { version = "0.8", registry = "substrate", path = "../substrate2/substrate" }
+spectre = { version = "0.9", registry = "substrate" , path = "../substrate2/tools/spectre" }
+sky130pdk = { version = "0.8", registry = "substrate", path = "../substrate2/pdks/sky130pdk" }
+atoll = { version = "0.1", registry = "substrate", path = "../substrate2/libs/atoll" }
+spice = { version = "0.7", registry = "substrate", path = "../substrate2/libs/spice" }
+
+serde = { version = "1", features = ["derive"] }
+rust_decimal = "1"
+rust_decimal_macros = "1"
+approx = "0.5"
