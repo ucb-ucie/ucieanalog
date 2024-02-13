@@ -396,7 +396,7 @@ impl Tile<Sky130Pdk> for StrongArmInstance {
                         strongarm_lcm_hspan,
                         Span::from_point(track),
                     ))
-                    .expand_dir(Dir::Vert, 130)
+                    .expand_dir(Dir::Vert, 200)
             })
             .collect::<Vec<_>>();
 
