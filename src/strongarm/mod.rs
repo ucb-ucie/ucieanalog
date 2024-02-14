@@ -382,7 +382,7 @@ impl Tile<Sky130Pdk> for StrongArmInstance {
             cell.assign_grid_points(
                 port,
                 1,
-                Rect::from_spans(strongarm_lcm_hspan, Span::from_point(lcm_tracks[i])),
+                Rect::from_spans(strongarm_lcm_hspan, Span::new(lcm_tracks[i], lcm_tracks[i] + 1)),
             );
         }
 
