@@ -91,7 +91,7 @@ impl Schematic<Sky130Pdk> for TwoFingerMosTile {
         match self.kind {
             MosTileKind::Pmos => {
                 let pmos = cell.instantiate(PmosTile::new(self.w, self.l, 2));
-                cell.connect(pmos.io().g, io.g);
+                cell.connect(pmos.io().g[0], io.g);
                 cell.connect(pmos.io().b, io.b);
                 cell.connect(pmos.io().sd[0], io.sd0);
                 cell.connect(pmos.io().sd[1], io.sd1);
@@ -99,7 +99,7 @@ impl Schematic<Sky130Pdk> for TwoFingerMosTile {
             }
             MosTileKind::Nmos => {
                 let nmos = cell.instantiate(NmosTile::new(self.w, self.l, 2));
-                cell.connect(nmos.io().g, io.g);
+                cell.connect(nmos.io().g[0], io.g);
                 cell.connect(nmos.io().b, io.b);
                 cell.connect(nmos.io().sd[0], io.sd0);
                 cell.connect(nmos.io().sd[1], io.sd1);
@@ -123,7 +123,7 @@ impl Layout<Sky130Pdk> for TwoFingerMosTile {
         match self.kind {
             MosTileKind::Pmos => {
                 let pmos = cell.generate(PmosTile::new(self.w, self.l, 2));
-                io.g.merge(pmos.io().g);
+                io.g.merge(pmos.io().g[0].clone());
                 io.sd0.merge(pmos.io().sd[0].clone());
                 io.sd1.merge(pmos.io().sd[1].clone());
                 io.sd2.merge(pmos.io().sd[2].clone());
@@ -132,7 +132,7 @@ impl Layout<Sky130Pdk> for TwoFingerMosTile {
             }
             MosTileKind::Nmos => {
                 let nmos = cell.generate(NmosTile::new(self.w, self.l, 2));
-                io.g.merge(nmos.io().g);
+                io.g.merge(nmos.io().g[0].clone());
                 io.sd0.merge(nmos.io().sd[0].clone());
                 io.sd1.merge(nmos.io().sd[1].clone());
                 io.sd2.merge(nmos.io().sd[2].clone());
