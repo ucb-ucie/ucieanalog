@@ -18,3 +18,4 @@ serde = { version = "1", features = ["derive"] }
 rust_decimal = "1"
 rust_decimal_macros = "1"
 approx = "0.5"
+derive-where = "1"
