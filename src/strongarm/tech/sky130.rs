@@ -82,6 +82,7 @@ impl Tile<Sky130Pdk> for TwoFingerMosTile {
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
+        cell.flatten();
         match self.kind {
             TileKind::P => {
                 let pmos = cell.generate_primitive(PmosTile::new(self.w, self.l, 2));
@@ -170,6 +171,7 @@ impl Tile<Sky130Pdk> for TapTile {
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
+        cell.flatten();
         match self.0.kind {
             TileKind::N => {
                 let inst = cell.generate_primitive(sky130pdk::atoll::NtapTile::new(

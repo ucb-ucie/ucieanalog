@@ -101,18 +101,18 @@ pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
 
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
-pub struct StrongArm<T>(
+pub struct StrongArmHalf<T>(
     StrongArmParams,
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
 
-impl<T> StrongArm<T> {
+impl<T> StrongArmHalf<T> {
     pub fn new(params: StrongArmParams) -> Self {
         Self(params, PhantomData)
     }
 }
 
-impl<T: Any> Block for StrongArm<T> {
+impl<T: Any> Block for StrongArmHalf<T> {
     type Io = ClockedDiffComparatorIo;
 
     fn id() -> ArcStr {
@@ -128,15 +128,15 @@ impl<T: Any> Block for StrongArm<T> {
     }
 }
 
-impl<T: Any> ExportsNestedData for StrongArm<T> {
+impl<T: Any> ExportsNestedData for StrongArmHalf<T> {
     type NestedData = ();
 }
 
-impl<T: Any> ExportsLayoutData for StrongArm<T> {
+impl<T: Any> ExportsLayoutData for StrongArmHalf<T> {
     type LayoutData = ();
 }
 
-impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for StrongArm<T> {
+impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for StrongArmHalf<T> {
     fn tile<'a>(
         &self,
         io: IoBuilder<'a, Self>,
@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn strongarm_sim() {
         let work_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/build/strongarm_sim");
-        let dut = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
+        let dut = TileWrapper::new(StrongArmHalf::<Sky130>::new(StrongArmParams {
             half_tail_w: 1_250,
             input_pair_w: 4_000,
             inv_nmos_w: 2_000,
@@ -539,7 +539,7 @@ mod tests {
         let netlist_path = work_dir.join("netlist.sp");
         let ctx = sky130_ctx();
 
-        let block = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
+        let block = TileWrapper::new(StrongArmHalf::<Sky130>::new(StrongArmParams {
             half_tail_w: 1_250,
             input_pair_w: 4_000,
             inv_nmos_w: 2_000,
