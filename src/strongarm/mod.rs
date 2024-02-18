@@ -1,5 +1,5 @@
 use atoll::route::{GreedyRouter, ViaMaker};
-use atoll::{IoBuilder, Tile, TileBuilder};
+use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
 use sky130pdk::atoll::{MosLength, NmosTile, NtapTile, PmosTile, PtapTile, Sky130ViaMaker};
 use sky130pdk::Sky130Pdk;
@@ -99,28 +99,39 @@ pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
     fn port_layer(layers: &<PDK as Pdk>::Layers) -> Self::PortLayer;
 }
 
+#[derive(Debug, Default, Clone, Io)]
+struct StrongArmHalfIo {
+    /// Ports that are exposed at the top level of a StrongARM.
+    top_io: InOut<ClockedDiffComparatorIo>,
+    /// Drains of input pair.
+    input_d: InOut<DiffPair>,
+    /// Drain of tail.
+    tail_d: InOut<Signal>,
+}
+
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
-pub struct StrongArmHalf<T>(
+struct StrongArmHalf<T>(
     StrongArmParams,
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
 
 impl<T> StrongArmHalf<T> {
-    pub fn new(params: StrongArmParams) -> Self {
+    fn new(params: StrongArmParams) -> Self {
         Self(params, PhantomData)
     }
 }
 
 impl<T: Any> Block for StrongArmHalf<T> {
-    type Io = ClockedDiffComparatorIo;
+    type Io = StrongArmHalfIo;
 
     fn id() -> ArcStr {
-        substrate::arcstr::literal!("strongarm")
+        substrate::arcstr::literal!("strong_arm_half")
     }
 
+    // todo: include parameters in name
     fn name(&self) -> ArcStr {
-        substrate::arcstr::literal!("strongarm")
+        substrate::arcstr::literal!("strong_arm_half")
     }
 
     fn io(&self) -> Self::Io {
@@ -151,17 +162,17 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         let inv_pmos_params = MosTileParams::new(TileKind::P, self.0.inv_pmos_w);
         let precharge_params = MosTileParams::new(TileKind::P, self.0.precharge_w);
 
-        let tail = cell.signal("tail", Signal);
-        let intn = cell.signal("intn", Signal);
+        let tail = io.schematic.tail_d;
+        let intn = io.schematic.input_d.n;
         let intp = cell.signal("intp", Signal);
 
         let mut tail_dummy = cell.generate_connected(
             T::dummy(half_tail_params),
             MosIoSchematic {
-                d: io.schematic.vss,
-                g: io.schematic.vss,
-                s: io.schematic.vss,
-                b: io.schematic.vss,
+                d: io.schematic.top_io.vss,
+                g: io.schematic.top_io.vss,
+                s: io.schematic.top_io.vss,
+                b: io.schematic.top_io.vss,
             },
         );
         let mut tail_pair = (0..2)
@@ -170,9 +181,9 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                     T::mos(half_tail_params),
                     MosIoSchematic {
                         d: tail,
-                        g: io.schematic.clock,
-                        s: io.schematic.vss,
-                        b: io.schematic.vss,
+                        g: io.schematic.top_io.clock,
+                        s: io.schematic.top_io.vss,
+                        b: io.schematic.top_io.vss,
                     },
                 )
             })
@@ -180,8 +191,8 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
 
         let mut ptap = cell.generate(T::tap(TapTileParams::new(TileKind::P, 2, 1)));
         let ntap = cell.generate(T::tap(TapTileParams::new(TileKind::N, 2, 1)));
-        cell.connect(ptap.io().x, io.schematic.vss);
-        cell.connect(ntap.io().x, io.schematic.vdd);
+        cell.connect(ptap.io().x, io.schematic.top_io.vss);
+        cell.connect(ntap.io().x, io.schematic.top_io.vdd);
 
         let mut input_pair = (0..2)
             .map(|i| {
@@ -190,12 +201,12 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                     MosIoSchematic {
                         d: if i == 0 { intn } else { intp },
                         g: if i == 0 {
-                            io.schematic.input.p
+                            io.schematic.top_io.input.p
                         } else {
-                            io.schematic.input.n
+                            io.schematic.top_io.input.n
                         },
                         s: tail,
-                        b: io.schematic.vss,
+                        b: io.schematic.top_io.vss,
                     },
                 )
             })
@@ -203,10 +214,10 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         let mut input_dummy = cell.generate_connected(
             T::dummy(input_pair_params),
             MosIoSchematic {
-                d: io.schematic.vss,
-                g: io.schematic.vss,
-                s: io.schematic.vss,
-                b: io.schematic.vss,
+                d: io.schematic.top_io.vss,
+                g: io.schematic.top_io.vss,
+                s: io.schematic.top_io.vss,
+                b: io.schematic.top_io.vss,
             },
         );
         let mut inv_nmos_pair = (0..2)
@@ -215,17 +226,17 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                     T::mos(inv_nmos_params),
                     if i == 0 {
                         MosIoSchematic {
-                            d: io.schematic.output.n,
-                            g: io.schematic.output.p,
+                            d: io.schematic.top_io.output.n,
+                            g: io.schematic.top_io.output.p,
                             s: intn,
-                            b: io.schematic.vss,
+                            b: io.schematic.top_io.vss,
                         }
                     } else {
                         MosIoSchematic {
-                            d: io.schematic.output.p,
-                            g: io.schematic.output.n,
+                            d: io.schematic.top_io.output.p,
+                            g: io.schematic.top_io.output.n,
                             s: intp,
-                            b: io.schematic.vss,
+                            b: io.schematic.top_io.vss,
                         }
                     },
                 )
@@ -234,10 +245,10 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         let mut inv_nmos_dummy = cell.generate_connected(
             T::dummy(inv_nmos_params),
             MosIoSchematic {
-                d: io.schematic.vss,
-                g: io.schematic.vss,
-                s: io.schematic.vss,
-                b: io.schematic.vss,
+                d: io.schematic.top_io.vss,
+                g: io.schematic.top_io.vss,
+                s: io.schematic.top_io.vss,
+                b: io.schematic.top_io.vss,
             },
         );
         let mut inv_pmos_pair = (0..2)
@@ -246,17 +257,17 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                     T::mos(inv_pmos_params),
                     MosIoSchematic {
                         d: if i == 0 {
-                            io.schematic.output.n
+                            io.schematic.top_io.output.n
                         } else {
-                            io.schematic.output.p
+                            io.schematic.top_io.output.p
                         },
                         g: if i == 0 {
-                            io.schematic.output.p
+                            io.schematic.top_io.output.p
                         } else {
-                            io.schematic.output.n
+                            io.schematic.top_io.output.n
                         },
-                        s: io.schematic.vdd,
-                        b: io.schematic.vdd,
+                        s: io.schematic.top_io.vdd,
+                        b: io.schematic.top_io.vdd,
                     },
                 )
             })
@@ -264,10 +275,10 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         let mut inv_pmos_dummy = cell.generate_connected(
             T::dummy(inv_pmos_params),
             MosIoSchematic {
-                d: io.schematic.vdd,
-                g: io.schematic.vdd,
-                s: io.schematic.vdd,
-                b: io.schematic.vdd,
+                d: io.schematic.top_io.vdd,
+                g: io.schematic.top_io.vdd,
+                s: io.schematic.top_io.vdd,
+                b: io.schematic.top_io.vdd,
             },
         );
         let mut precharge_pair_a = (0..2)
@@ -276,13 +287,13 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                     T::mos(precharge_params),
                     MosIoSchematic {
                         d: if i == 0 {
-                            io.schematic.output.n
+                            io.schematic.top_io.output.n
                         } else {
-                            io.schematic.output.p
+                            io.schematic.top_io.output.p
                         },
-                        g: io.schematic.clock,
-                        s: io.schematic.vdd,
-                        b: io.schematic.vdd,
+                        g: io.schematic.top_io.clock,
+                        s: io.schematic.top_io.vdd,
+                        b: io.schematic.top_io.vdd,
                     },
                 )
             })
@@ -290,10 +301,10 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         let mut precharge_pair_a_dummy = cell.generate_connected(
             T::dummy(precharge_params),
             MosIoSchematic {
-                d: io.schematic.vdd,
-                g: io.schematic.vdd,
-                s: io.schematic.vdd,
-                b: io.schematic.vdd,
+                d: io.schematic.top_io.vdd,
+                g: io.schematic.top_io.vdd,
+                s: io.schematic.top_io.vdd,
+                b: io.schematic.top_io.vdd,
             },
         );
         let mut precharge_pair_b = (0..2)
@@ -302,9 +313,9 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                     T::mos(precharge_params),
                     MosIoSchematic {
                         d: if i == 0 { intn } else { intp },
-                        g: io.schematic.clock,
-                        s: io.schematic.vdd,
-                        b: io.schematic.vdd,
+                        g: io.schematic.top_io.clock,
+                        s: io.schematic.top_io.vdd,
+                        b: io.schematic.top_io.vdd,
                     },
                 )
             })
@@ -312,10 +323,10 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         let mut precharge_pair_b_dummy = cell.generate_connected(
             T::dummy(precharge_params),
             MosIoSchematic {
-                d: io.schematic.vdd,
-                g: io.schematic.vdd,
-                s: io.schematic.vdd,
-                b: io.schematic.vdd,
+                d: io.schematic.top_io.vdd,
+                g: io.schematic.top_io.vdd,
+                s: io.schematic.top_io.vdd,
+                b: io.schematic.top_io.vdd,
             },
         );
 
@@ -381,8 +392,11 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
 
-        io.layout.vdd.set_primary(ntap.layout.io().x.primary);
-        io.layout.vss.set_primary(ptap.layout.io().x.primary);
+        io.layout.top_io.vdd.set_primary(ntap.layout.io().x.primary);
+        io.layout.top_io.vss.set_primary(ptap.layout.io().x.primary);
+        io.layout.input_d.n.merge(input_pair[0].layout.io().d);
+        io.layout.input_d.p.merge(input_pair[1].layout.io().d);
+        io.layout.tail_d.merge(tail_pair[0].layout.io().d);
 
         let m1slice = cell.layer_stack.slice(0..2);
 
@@ -402,11 +416,11 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         }
 
         for (i, port) in [
-            io.schematic.clock,
-            io.schematic.input.p,
-            io.schematic.input.n,
-            io.schematic.output.p,
-            io.schematic.output.n,
+            io.schematic.top_io.clock,
+            io.schematic.top_io.input.p,
+            io.schematic.top_io.input.n,
+            io.schematic.top_io.output.p,
+            io.schematic.top_io.output.n,
         ]
         .into_iter()
         .enumerate()
@@ -436,11 +450,11 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             .collect::<Vec<_>>();
 
         for (i, port) in [
-            &mut io.layout.clock,
-            &mut io.layout.input.p,
-            &mut io.layout.input.n,
-            &mut io.layout.output.p,
-            &mut io.layout.output.n,
+            &mut io.layout.top_io.clock,
+            &mut io.layout.top_io.input.p,
+            &mut io.layout.top_io.input.n,
+            &mut io.layout.top_io.output.p,
+            &mut io.layout.top_io.output.n,
         ]
         .into_iter()
         .enumerate()
@@ -452,6 +466,167 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                 io_rects[i],
             ));
         }
+
+        Ok(((), ()))
+    }
+}
+
+#[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
+pub struct StrongArm<T>(
+    StrongArmParams,
+    #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
+);
+
+impl<T> StrongArm<T> {
+    pub fn new(params: StrongArmParams) -> Self {
+        Self(params, PhantomData)
+    }
+}
+
+impl<T: Any> Block for StrongArm<T> {
+    type Io = ClockedDiffComparatorIo;
+
+    fn id() -> ArcStr {
+        substrate::arcstr::literal!("strong_arm")
+    }
+
+    // todo: include parameters in name
+    fn name(&self) -> ArcStr {
+        substrate::arcstr::literal!("strong_arm")
+    }
+
+    fn io(&self) -> Self::Io {
+        Default::default()
+    }
+}
+
+impl<T: Any> ExportsNestedData for StrongArm<T> {
+    type NestedData = ();
+}
+
+impl<T: Any> ExportsLayoutData for StrongArm<T> {
+    type LayoutData = ();
+}
+
+impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for StrongArm<T> {
+    fn tile<'a>(
+        &self,
+        io: IoBuilder<'a, Self>,
+        cell: &mut TileBuilder<'a, PDK>,
+    ) -> substrate::error::Result<(
+        <Self as ExportsNestedData>::NestedData,
+        <Self as ExportsLayoutData>::LayoutData,
+    )> {
+        let tail_d = cell.signal("tail_d", Signal::new());
+        let input_d = cell.signal("input_d", DiffPair::default());
+
+        let conn = StrongArmHalfIoSchematic {
+            top_io: io.schematic.clone(),
+            input_d,
+            tail_d,
+        };
+        let left_half = cell.generate_connected(StrongArmHalf::<T>::new(self.0), conn.clone());
+
+        let mut right_half = cell
+            .generate_connected(StrongArmHalf::<T>::new(self.0), conn)
+            .orient(Orientation::ReflectHoriz)
+            .align(&left_half, AlignMode::ToTheRight, 0);
+
+        let left_half = cell.draw(left_half)?;
+        let right_half = cell.draw(right_half)?;
+
+        cell.set_top_layer(2);
+        cell.set_router(GreedyRouter);
+        cell.set_via_maker(T::via_maker());
+
+        io.layout.clock.push(IoShape::with_layers(
+            T::port_layer(&cell.ctx().layers),
+            left_half
+                .layout
+                .io()
+                .top_io
+                .clock
+                .primary
+                .bbox_rect()
+                .union(right_half.layout.io().top_io.clock.primary.bbox_rect()),
+        ));
+        let vdd_layer = left_half.layout.io().top_io.vdd.primary.layer();
+        let vdd_rect = left_half
+            .layout
+            .io()
+            .top_io
+            .vdd
+            .primary
+            .bbox_rect()
+            .union(right_half.layout.io().top_io.vdd.primary.bbox_rect());
+        io.layout
+            .vdd
+            .push(IoShape::with_layers(vdd_layer, vdd_rect));
+        cell.layout
+            .draw(Shape::new(vdd_layer.drawing(), vdd_rect))?;
+        let vss_layer = left_half.layout.io().top_io.vss.primary.layer();
+        let vss_rect = left_half
+            .layout
+            .io()
+            .top_io
+            .vss
+            .primary
+            .bbox_rect()
+            .union(right_half.layout.io().top_io.vss.primary.bbox_rect());
+        io.layout
+            .vss
+            .push(IoShape::with_layers(vss_layer, vss_rect));
+        cell.layout
+            .draw(Shape::new(vss_layer.drawing(), vss_rect))?;
+        io.layout.input.p.push(IoShape::with_layers(
+            T::port_layer(&cell.ctx().layers),
+            left_half
+                .layout
+                .io()
+                .top_io
+                .input
+                .p
+                .primary
+                .bbox_rect()
+                .union(right_half.layout.io().top_io.input.p.primary.bbox_rect()),
+        ));
+        io.layout.input.n.push(IoShape::with_layers(
+            T::port_layer(&cell.ctx().layers),
+            left_half
+                .layout
+                .io()
+                .top_io
+                .input
+                .n
+                .primary
+                .bbox_rect()
+                .union(right_half.layout.io().top_io.input.n.primary.bbox_rect()),
+        ));
+        io.layout.output.p.push(IoShape::with_layers(
+            T::port_layer(&cell.ctx().layers),
+            left_half
+                .layout
+                .io()
+                .top_io
+                .output
+                .p
+                .primary
+                .bbox_rect()
+                .union(right_half.layout.io().top_io.output.p.primary.bbox_rect()),
+        ));
+        io.layout.output.n.push(IoShape::with_layers(
+            T::port_layer(&cell.ctx().layers),
+            left_half
+                .layout
+                .io()
+                .top_io
+                .output
+                .n
+                .primary
+                .bbox_rect()
+                .union(right_half.layout.io().top_io.output.n.primary.bbox_rect()),
+        ));
 
         Ok(((), ()))
     }
@@ -477,7 +652,7 @@ mod tests {
     #[test]
     fn strongarm_sim() {
         let work_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/build/strongarm_sim");
-        let dut = TileWrapper::new(StrongArmHalf::<Sky130>::new(StrongArmParams {
+        let dut = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
             half_tail_w: 1_250,
             input_pair_w: 4_000,
             inv_nmos_w: 2_000,
@@ -539,7 +714,7 @@ mod tests {
         let netlist_path = work_dir.join("netlist.sp");
         let ctx = sky130_ctx();
 
-        let block = TileWrapper::new(StrongArmHalf::<Sky130>::new(StrongArmParams {
+        let block = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
             half_tail_w: 1_250,
             input_pair_w: 4_000,
             inv_nmos_w: 2_000,
