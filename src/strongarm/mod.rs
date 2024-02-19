@@ -94,6 +94,9 @@ pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
     fn tap(params: TapTileParams) -> Self::TapTile;
     fn via_maker() -> Self::ViaMaker;
     fn port_layer(layers: &<PDK as Pdk>::Layers) -> Self::PortLayer;
+    fn post_layout_hooks<'a>(cell: &mut TileBuilder<'a, PDK>) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Clone, Io)]
