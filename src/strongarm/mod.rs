@@ -605,6 +605,8 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                 .union(right_half.layout.io().top_io.output.n.primary.bbox_rect()),
         ));
 
+        T::post_layout_hooks(cell)?;
+
         Ok(((), ()))
     }
 }
