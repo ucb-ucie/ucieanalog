@@ -549,34 +549,10 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                 .bbox_rect()
                 .union(right_half.layout.io().top_io.clock.primary.bbox_rect()),
         ));
-        let vdd_layer = left_half.layout.io().top_io.vdd.primary.layer();
-        let vdd_rect = left_half
-            .layout
-            .io()
-            .top_io
-            .vdd
-            .primary
-            .bbox_rect()
-            .union(right_half.layout.io().top_io.vdd.primary.bbox_rect());
-        io.layout
-            .vdd
-            .push(IoShape::with_layers(vdd_layer, vdd_rect));
-        cell.layout
-            .draw(Shape::new(vdd_layer.drawing(), vdd_rect))?;
-        let vss_layer = left_half.layout.io().top_io.vss.primary.layer();
-        let vss_rect = left_half
-            .layout
-            .io()
-            .top_io
-            .vss
-            .primary
-            .bbox_rect()
-            .union(right_half.layout.io().top_io.vss.primary.bbox_rect());
-        io.layout
-            .vss
-            .push(IoShape::with_layers(vss_layer, vss_rect));
-        cell.layout
-            .draw(Shape::new(vss_layer.drawing(), vss_rect))?;
+        io.layout.vdd.merge(left_half.layout.io().top_io.vdd);
+        io.layout.vdd.merge(right_half.layout.io().top_io.vdd);
+        io.layout.vss.merge(left_half.layout.io().top_io.vss);
+        io.layout.vss.merge(right_half.layout.io().top_io.vss);
         io.layout.input.p.push(IoShape::with_layers(
             T::port_layer(&cell.ctx().layers),
             left_half
