@@ -21,16 +21,12 @@ pub struct Sky130;
 
 impl HasStrongArmImpl<Sky130Pdk> for Sky130 {
     type MosTile = TwoFingerMosTile;
-    type DummyTile = TwoFingerMosTile;
     type TapTile = TapTile;
     type PortLayer = Met1;
     type ViaMaker = Sky130ViaMaker;
 
     fn mos(params: MosTileParams) -> Self::MosTile {
         TwoFingerMosTile::new(params.w, MosLength::L150, params.kind)
-    }
-    fn dummy(params: MosTileParams) -> Self::MosTile {
-        Self::mos(params)
     }
     fn tap(params: TapTileParams) -> Self::TapTile {
         TapTile::new(params)
@@ -175,7 +171,7 @@ impl Tile<Sky130Pdk> for TapTile {
         match self.0.kind {
             TileKind::N => {
                 let inst = cell.generate_primitive(sky130pdk::atoll::NtapTile::new(
-                    4 * (self.0.mos + self.0.dummy) - 1,
+                    4 * self.0.mos_span - 1,
                     2,
                 ));
                 cell.connect(io.schematic.x, inst.io().vpb);
@@ -184,7 +180,7 @@ impl Tile<Sky130Pdk> for TapTile {
             }
             TileKind::P => {
                 let inst = cell.generate_primitive(sky130pdk::atoll::PtapTile::new(
-                    4 * (self.0.mos + self.0.dummy) - 1,
+                    4 * self.0.mos_span - 1,
                     2,
                 ));
                 cell.connect(io.schematic.x, inst.io().vnb);

@@ -1,5 +1,5 @@
 [package]
-name = "uciephy"
+name = "ucieanalog"
 version = "0.0.0"
 edition = "2021"
 authors = ["Rahul Kumar <rahulkumar@berkeley.edu>", "Rohan Kumar <rohankumar@berkeley.edu>"]

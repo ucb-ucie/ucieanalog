@@ -1,3 +1,4 @@
+use atoll::grid::AtollLayer;
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
@@ -74,26 +75,22 @@ impl MosTileParams {
 pub struct TapTileParams {
     pub kind: TileKind,
     /// Number of MOS devices this tap must span.
-    pub mos: i64,
-    /// Number of dummy devices this tap must span.
-    pub dummy: i64,
+    pub mos_span: i64,
 }
 
 impl TapTileParams {
-    pub fn new(kind: TileKind, mos: i64, dummy: i64) -> Self {
-        Self { kind, mos, dummy }
+    pub fn new(kind: TileKind, mos_span: i64) -> Self {
+        Self { kind, mos_span }
     }
 }
 
 pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
     type MosTile: Tile<PDK> + Block<Io = MosIo> + Clone;
-    type DummyTile: Tile<PDK> + Block<Io = MosIo> + Clone;
     type TapTile: Tile<PDK> + Block<Io = TapIo> + Clone;
     type PortLayer: HasPin;
     type ViaMaker: ViaMaker<PDK>;
 
     fn mos(params: MosTileParams) -> Self::MosTile;
-    fn dummy(params: MosTileParams) -> Self::DummyTile;
     fn tap(params: TapTileParams) -> Self::TapTile;
     fn via_maker() -> Self::ViaMaker;
     fn port_layer(layers: &<PDK as Pdk>::Layers) -> Self::PortLayer;
@@ -167,7 +164,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         let intp = cell.signal("intp", Signal);
 
         let mut tail_dummy = cell.generate_connected(
-            T::dummy(half_tail_params),
+            T::mos(half_tail_params),
             MosIoSchematic {
                 d: io.schematic.top_io.vss,
                 g: io.schematic.top_io.vss,
@@ -189,8 +186,8 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             })
             .collect::<Vec<_>>();
 
-        let mut ptap = cell.generate(T::tap(TapTileParams::new(TileKind::P, 2, 1)));
-        let ntap = cell.generate(T::tap(TapTileParams::new(TileKind::N, 2, 1)));
+        let mut ptap = cell.generate(T::tap(TapTileParams::new(TileKind::P, 3)));
+        let ntap = cell.generate(T::tap(TapTileParams::new(TileKind::N, 3)));
         cell.connect(ptap.io().x, io.schematic.top_io.vss);
         cell.connect(ntap.io().x, io.schematic.top_io.vdd);
 
@@ -212,7 +209,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             })
             .collect::<Vec<_>>();
         let mut input_dummy = cell.generate_connected(
-            T::dummy(input_pair_params),
+            T::mos(input_pair_params),
             MosIoSchematic {
                 d: io.schematic.top_io.vss,
                 g: io.schematic.top_io.vss,
@@ -243,7 +240,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             })
             .collect::<Vec<_>>();
         let mut inv_nmos_dummy = cell.generate_connected(
-            T::dummy(inv_nmos_params),
+            T::mos(inv_nmos_params),
             MosIoSchematic {
                 d: io.schematic.top_io.vss,
                 g: io.schematic.top_io.vss,
@@ -273,7 +270,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             })
             .collect::<Vec<_>>();
         let mut inv_pmos_dummy = cell.generate_connected(
-            T::dummy(inv_pmos_params),
+            T::mos(inv_pmos_params),
             MosIoSchematic {
                 d: io.schematic.top_io.vdd,
                 g: io.schematic.top_io.vdd,
@@ -299,7 +296,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             })
             .collect::<Vec<_>>();
         let mut precharge_pair_a_dummy = cell.generate_connected(
-            T::dummy(precharge_params),
+            T::mos(precharge_params),
             MosIoSchematic {
                 d: io.schematic.top_io.vdd,
                 g: io.schematic.top_io.vdd,
@@ -321,7 +318,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             })
             .collect::<Vec<_>>();
         let mut precharge_pair_b_dummy = cell.generate_connected(
-            T::dummy(precharge_params),
+            T::mos(precharge_params),
             MosIoSchematic {
                 d: io.schematic.top_io.vdd,
                 g: io.schematic.top_io.vdd,
@@ -445,7 +442,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
                         strongarm_lcm_hspan,
                         Span::from_point(track),
                     ))
-                    .expand_dir(Dir::Vert, 200)
+                    .expand_dir(Dir::Vert, cell.layer_stack.layer(1).line() / 2)
             })
             .collect::<Vec<_>>();
 
@@ -471,6 +468,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
     }
 }
 
+/// Layout assumes that PDK layer stack has a vertical layer 0.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
 pub struct StrongArm<T>(
