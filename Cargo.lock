@@ -211,6 +211,7 @@ dependencies = [
  "indexmap 2.2.3",
  "num",
  "pathfinding",
+ "rustc-hash",
  "serde",
  "substrate",
  "tracing",
