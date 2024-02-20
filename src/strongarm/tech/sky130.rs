@@ -1,6 +1,4 @@
-use crate::strongarm::{
-    ClockedDiffComparatorIo, HasStrongArmImpl, MosTileParams, TapIo, TapTileParams, TileKind,
-};
+use crate::strongarm::{HasStrongArmImpl, MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::GreedyRouter;
 use atoll::{IoBuilder, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
@@ -10,12 +8,10 @@ use sky130pdk::Sky130Pdk;
 use substrate::arcstr;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
-use substrate::io::layout::Builder;
-use substrate::io::schematic::{Bundle, Node};
-use substrate::io::{InOut, Input, Io, MosIo, Signal};
-use substrate::layout::{ExportsLayoutData, Layout};
+use substrate::io::MosIo;
+use substrate::layout::ExportsLayoutData;
 use substrate::pdk::Pdk;
-use substrate::schematic::{CellBuilder, ExportsNestedData, Schematic};
+use substrate::schematic::ExportsNestedData;
 
 pub struct Sky130;
 

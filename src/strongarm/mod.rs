@@ -2,11 +2,8 @@ use atoll::grid::AtollLayer;
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
-use sky130pdk::atoll::{MosLength, NmosTile, NtapTile, PmosTile, PtapTile, Sky130ViaMaker};
-use sky130pdk::Sky130Pdk;
 use std::any::Any;
 use std::marker::PhantomData;
-use std::ops::Deref;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
@@ -15,15 +12,14 @@ use substrate::geometry::bbox::Bbox;
 use substrate::geometry::dir::Dir;
 use substrate::geometry::rect::Rect;
 use substrate::geometry::span::Span;
-use substrate::io::layout::{Builder, IoShape};
-use substrate::io::schematic::{Bundle, Node};
+use substrate::io::layout::IoShape;
 use substrate::io::{DiffPair, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::element::Shape;
-use substrate::layout::{ExportsLayoutData, Layout};
+use substrate::layout::ExportsLayoutData;
 use substrate::pdk::layers::HasPin;
 use substrate::pdk::Pdk;
 use substrate::schematic::schema::Schema;
-use substrate::schematic::{CellBuilder, ExportsNestedData, Schematic};
+use substrate::schematic::ExportsNestedData;
 
 pub mod tb;
 pub mod tech;
@@ -94,7 +90,7 @@ pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
     fn tap(params: TapTileParams) -> Self::TapTile;
     fn via_maker() -> Self::ViaMaker;
     fn port_layer(layers: &<PDK as Pdk>::Layers) -> Self::PortLayer;
-    fn post_layout_hooks<'a>(cell: &mut TileBuilder<'a, PDK>) -> Result<()> {
+    fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
     }
 }
@@ -529,7 +525,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         };
         let left_half = cell.generate_connected(StrongArmHalf::<T>::new(self.0), conn.clone());
 
-        let mut right_half = cell
+        let right_half = cell
             .generate_connected(StrongArmHalf::<T>::new(self.0), conn)
             .orient(Orientation::ReflectHoriz)
             .align(&left_half, AlignMode::ToTheRight, 0);
