@@ -1,5 +1,5 @@
 [package]
-name = "uciephy"
+name = "ucieanalog"
 version = "0.0.0"
 edition = "2021"
 authors = ["Rahul Kumar <rahulkumar@berkeley.edu>", "Rohan Kumar <rohankumar@berkeley.edu>"]
@@ -18,3 +18,4 @@ serde = { version = "1", features = ["derive"] }
 rust_decimal = "1"
 rust_decimal_macros = "1"
 approx = "0.5"
+derive-where = "1"

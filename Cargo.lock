@@ -211,6 +211,7 @@ dependencies = [
  "indexmap 2.2.3",
  "num",
  "pathfinding",
+ "rustc-hash",
  "serde",
  "substrate",
  "tracing",
@@ -724,6 +725,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "semver",
+ "syn 2.0.48",
+]
+
+[[package]]
+name = "derive-where"
+version = "1.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62d671cc41a825ebabc75757b62d3d168c577f9149b2d49ece1dad1f72119d25"
+dependencies = [
+ "proc-macro2",
+ "quote",
  "syn 2.0.48",
 ]
 
@@ -2961,11 +2973,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 
 [[package]]
-name = "uciephy"
+name = "ucieanalog"
 version = "0.0.0"
 dependencies = [
  "approx",
  "atoll",
+ "derive-where",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
