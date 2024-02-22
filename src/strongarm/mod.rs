@@ -363,7 +363,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             .map(|inst| cell.draw(inst))
             .collect::<Result<Vec<_>>>()?;
         let _input_dummy = cell.draw(input_dummy)?;
-        let _inv_nmos_pair = inv_nmos_pair
+        let inv_nmos_pair = inv_nmos_pair
             .into_iter()
             .map(|inst| cell.draw(inst))
             .collect::<Result<Vec<_>>>()?;
@@ -393,75 +393,21 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         io.layout.input_d.n.merge(input_pair[0].layout.io().d);
         io.layout.input_d.p.merge(input_pair[1].layout.io().d);
         io.layout.tail_d.merge(tail_pair[0].layout.io().d);
+        io.layout.top_io.clock.merge(tail_pair[0].layout.io().g);
+        io.layout.top_io.input.p.merge(input_pair[0].layout.io().g);
+        io.layout.top_io.input.n.merge(input_pair[1].layout.io().g);
+        io.layout
+            .top_io
+            .output
+            .p
+            .merge(inv_nmos_pair[1].layout.io().d);
+        io.layout
+            .top_io
+            .output
+            .n
+            .merge(inv_nmos_pair[0].layout.io().d);
 
         let m1slice = cell.layer_stack.slice(0..2);
-
-        let mut lcm_tracks = Vec::new();
-        lcm_tracks.push(
-            m1slice
-                .shrink_to_lcm_units(tail_pair[0].layout.io().g.primary.bbox().unwrap())
-                .unwrap()
-                .bot(),
-        );
-        for io in [input_pair[0].layout.io(), inv_pmos_pair[0].layout.io()] {
-            let bot_track = m1slice
-                .expand_to_lcm_units(io.g.primary.bbox().unwrap())
-                .bot();
-            lcm_tracks.push(bot_track);
-            lcm_tracks.push(bot_track + 1);
-        }
-
-        for (i, port) in [
-            io.schematic.top_io.clock,
-            io.schematic.top_io.input.p,
-            io.schematic.top_io.input.n,
-            io.schematic.top_io.output.p,
-            io.schematic.top_io.output.n,
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            cell.assign_grid_points(
-                port,
-                1,
-                Rect::from_spans(
-                    strongarm_lcm_hspan,
-                    Span::new(lcm_tracks[i], lcm_tracks[i] + 1),
-                ),
-            );
-        }
-
-        let m1slice = cell.layer_stack.slice(0..2);
-
-        let io_rects = lcm_tracks
-            .into_iter()
-            .map(|track| {
-                m1slice
-                    .lcm_to_physical_rect(Rect::from_spans(
-                        strongarm_lcm_hspan,
-                        Span::from_point(track),
-                    ))
-                    .expand_dir(Dir::Vert, cell.layer_stack.layer(1).line() / 2)
-            })
-            .collect::<Vec<_>>();
-
-        for (i, port) in [
-            &mut io.layout.top_io.clock,
-            &mut io.layout.top_io.input.p,
-            &mut io.layout.top_io.input.n,
-            &mut io.layout.top_io.output.p,
-            &mut io.layout.top_io.output.n,
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            cell.layout
-                .draw(Shape::new(m1slice.layer(1).id, io_rects[i]))?;
-            port.set_primary(IoShape::with_layers(
-                T::port_layer(&cell.ctx().layers),
-                io_rects[i],
-            ));
-        }
 
         Ok(((), ()))
     }
@@ -537,69 +483,44 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
 
-        io.layout.clock.push(IoShape::with_layers(
-            T::port_layer(&cell.ctx().layers),
-            left_half
-                .layout
-                .io()
-                .top_io
-                .clock
-                .primary
-                .bbox_rect()
-                .union(right_half.layout.io().top_io.clock.primary.bbox_rect()),
-        ));
         io.layout.vdd.merge(left_half.layout.io().top_io.vdd);
         io.layout.vdd.merge(right_half.layout.io().top_io.vdd);
         io.layout.vss.merge(left_half.layout.io().top_io.vss);
         io.layout.vss.merge(right_half.layout.io().top_io.vss);
-        io.layout.input.p.push(IoShape::with_layers(
-            T::port_layer(&cell.ctx().layers),
-            left_half
-                .layout
-                .io()
-                .top_io
-                .input
-                .p
-                .primary
-                .bbox_rect()
-                .union(right_half.layout.io().top_io.input.p.primary.bbox_rect()),
-        ));
-        io.layout.input.n.push(IoShape::with_layers(
-            T::port_layer(&cell.ctx().layers),
-            left_half
-                .layout
-                .io()
-                .top_io
-                .input
-                .n
-                .primary
-                .bbox_rect()
-                .union(right_half.layout.io().top_io.input.n.primary.bbox_rect()),
-        ));
-        io.layout.output.p.push(IoShape::with_layers(
-            T::port_layer(&cell.ctx().layers),
-            left_half
-                .layout
-                .io()
-                .top_io
-                .output
-                .p
-                .primary
-                .bbox_rect()
-                .union(right_half.layout.io().top_io.output.p.primary.bbox_rect()),
-        ));
-        io.layout.output.n.push(IoShape::with_layers(
-            T::port_layer(&cell.ctx().layers),
-            left_half
-                .layout
-                .io()
-                .top_io
-                .output
-                .n
-                .primary
-                .bbox_rect()
-                .union(right_half.layout.io().top_io.output.n.primary.bbox_rect()),
-        ));
+        io.layout.clock.merge(left_half.layout.io().top_io.clock);
+        io.layout.clock.merge(right_half.layout.io().top_io.clock);
+        io.layout
+            .input
+            .p
+            .merge(left_half.layout.io().top_io.input.p);
+        io.layout
+            .input
+            .p
+            .merge(right_half.layout.io().top_io.input.p);
+        io.layout
+            .input
+            .n
+            .merge(left_half.layout.io().top_io.input.n);
+        io.layout
+            .input
+            .n
+            .merge(right_half.layout.io().top_io.input.n);
+        io.layout
+            .output
+            .p
+            .merge(left_half.layout.io().top_io.output.p);
+        io.layout
+            .output
+            .p
+            .merge(right_half.layout.io().top_io.output.p);
+        io.layout
+            .output
+            .n
+            .merge(left_half.layout.io().top_io.output.n);
+        io.layout
+            .output
+            .n
+            .merge(right_half.layout.io().top_io.output.n);
 
         T::post_layout_hooks(cell)?;
 
