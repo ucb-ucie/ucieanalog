@@ -1,4 +1,3 @@
-use atoll::grid::AtollLayer;
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
@@ -8,13 +7,7 @@ use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
 use substrate::geometry::align::AlignMode;
-use substrate::geometry::bbox::Bbox;
-use substrate::geometry::dir::Dir;
-use substrate::geometry::rect::Rect;
-use substrate::geometry::span::Span;
-use substrate::io::layout::IoShape;
 use substrate::io::{DiffPair, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
-use substrate::layout::element::Shape;
 use substrate::layout::ExportsLayoutData;
 use substrate::pdk::layers::HasPin;
 use substrate::pdk::Pdk;
@@ -349,8 +342,6 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         ptap.align_rect_mut(prev, AlignMode::Left, 0);
         ptap.align_rect_mut(prev, AlignMode::Beneath, 0);
 
-        let strongarm_lcm_hspan = ptap.lcm_bounds().hspan();
-
         let ptap = cell.draw(ptap)?;
         let ntap = cell.draw(ntap)?;
         let tail_pair = tail_pair
@@ -368,7 +359,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             .map(|inst| cell.draw(inst))
             .collect::<Result<Vec<_>>>()?;
         let _inv_nmos_dummy = cell.draw(inv_nmos_dummy)?;
-        let inv_pmos_pair = inv_pmos_pair
+        let _inv_pmos_pair = inv_pmos_pair
             .into_iter()
             .map(|inst| cell.draw(inst))
             .collect::<Result<Vec<_>>>()?;
@@ -406,8 +397,6 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             .output
             .n
             .merge(inv_nmos_pair[0].layout.io().d);
-
-        let m1slice = cell.layer_stack.slice(0..2);
 
         Ok(((), ()))
     }
