@@ -9,7 +9,6 @@ use substrate::error::Result;
 use substrate::geometry::align::AlignMode;
 use substrate::io::{DiffPair, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::ExportsLayoutData;
-use substrate::pdk::layers::HasPin;
 use substrate::pdk::Pdk;
 use substrate::schematic::schema::Schema;
 use substrate::schematic::ExportsNestedData;
@@ -76,13 +75,11 @@ impl TapTileParams {
 pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
     type MosTile: Tile<PDK> + Block<Io = MosIo> + Clone;
     type TapTile: Tile<PDK> + Block<Io = TapIo> + Clone;
-    type PortLayer: HasPin;
     type ViaMaker: ViaMaker<PDK>;
 
     fn mos(params: MosTileParams) -> Self::MosTile;
     fn tap(params: TapTileParams) -> Self::TapTile;
     fn via_maker() -> Self::ViaMaker;
-    fn port_layer(layers: &<PDK as Pdk>::Layers) -> Self::PortLayer;
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
     }
@@ -514,114 +511,5 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
         T::post_layout_hooks(cell)?;
 
         Ok(((), ()))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::sky130_ctx;
-    use crate::strongarm::tb::{ComparatorDecision, StrongArmTranTb};
-    use crate::strongarm::tech::sky130::Sky130;
-    use atoll::TileWrapper;
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
-    use sky130pdk::corner::Sky130Corner;
-    use sky130pdk::Sky130CommercialSchema;
-    use spice::netlist::NetlistOptions;
-    use spice::Spice;
-    use std::path::PathBuf;
-    use substrate::pdk::corner::Pvt;
-    use substrate::schematic::netlist::ConvertibleNetlister;
-
-    #[test]
-    fn strongarm_sim() {
-        let work_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/build/strongarm_sim");
-        let dut = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
-            half_tail_w: 1_250,
-            input_pair_w: 4_000,
-            inv_nmos_w: 2_000,
-            inv_pmos_w: 1_000,
-            precharge_w: 1_000,
-        }));
-        let pvt = Pvt {
-            corner: Sky130Corner::Tt,
-            voltage: dec!(1.8),
-            temp: dec!(25.0),
-        };
-        let ctx = sky130_ctx();
-
-        for i in 3..=10 {
-            for j in [
-                dec!(-1.8),
-                dec!(-0.5),
-                dec!(-0.1),
-                dec!(-0.05),
-                dec!(0.05),
-                dec!(0.1),
-                dec!(0.5),
-                dec!(1.8),
-            ] {
-                let vinn = dec!(0.18) * Decimal::from(i);
-                let vinp = vinn + j;
-
-                if vinp < dec!(0.5) || vinp > dec!(1.8) {
-                    continue;
-                }
-
-                let tb = StrongArmTranTb {
-                    dut: dut.clone(),
-                    vinp,
-                    vinn,
-                    pvt,
-                };
-                let decision = ctx
-                    .simulate(tb, work_dir)
-                    .expect("failed to run simulation")
-                    .expect("comparator output did not rail");
-                assert_eq!(
-                    decision,
-                    if j > dec!(0) {
-                        ComparatorDecision::Pos
-                    } else {
-                        ComparatorDecision::Neg
-                    },
-                    "comparator produced incorrect decision"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn strongarm_lvs() {
-        let work_dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/build/strongarm_lvs"));
-        let gds_path = work_dir.join("layout.gds");
-        let netlist_path = work_dir.join("netlist.sp");
-        let ctx = sky130_ctx();
-
-        let block = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
-            half_tail_w: 1_250,
-            input_pair_w: 4_000,
-            inv_nmos_w: 2_000,
-            inv_pmos_w: 1_000,
-            precharge_w: 1_000,
-        }));
-
-        let scir = ctx
-            .export_scir(block.clone())
-            .unwrap()
-            .scir
-            .convert_schema::<Sky130CommercialSchema>()
-            .unwrap()
-            .convert_schema::<Spice>()
-            .unwrap()
-            .build()
-            .unwrap();
-        Spice
-            .write_scir_netlist_to_file(&scir, netlist_path, NetlistOptions::default())
-            .expect("failed to write netlist");
-
-        ctx.write_layout(block, gds_path)
-            .expect("failed to write layout");
     }
 }
