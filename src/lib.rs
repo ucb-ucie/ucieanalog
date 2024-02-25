@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 use sky130pdk::Sky130Pdk;
 use spectre::Spectre;
 use substrate::context::{Context, PdkContext};

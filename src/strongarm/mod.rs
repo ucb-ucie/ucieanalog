@@ -26,12 +26,19 @@ pub struct ClockedDiffComparatorIo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum InputKind {
+    N,
+    P,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct StrongArmParams {
     pub half_tail_w: i64,
     pub input_pair_w: i64,
     pub inv_nmos_w: i64,
     pub inv_pmos_w: i64,
     pub precharge_w: i64,
+    pub input_kind: InputKind,
 }
 
 /// The IO of a tap.
