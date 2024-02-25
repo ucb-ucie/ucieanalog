@@ -206,8 +206,8 @@ mod tests {
         let dut = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
             half_tail_w: 1_250,
             input_pair_w: 4_000,
-            inv_nmos_w: 2_000,
-            inv_pmos_w: 1_000,
+            inv_input_w: 2_000,
+            inv_precharge_w: 1_000,
             precharge_w: 1_000,
         }));
         let pvt = Pvt {
@@ -263,8 +263,8 @@ mod tests {
         let block = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
             half_tail_w: 1_250,
             input_pair_w: 4_000,
-            inv_nmos_w: 2_000,
-            inv_pmos_w: 1_000,
+            inv_input_w: 2_000,
+            inv_precharge_w: 1_000,
             precharge_w: 1_000,
         }));
 
