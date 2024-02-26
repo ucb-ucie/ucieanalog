@@ -1,5 +1,6 @@
+use crate::strongarm::tb::Dut;
 use atoll::route::{GreedyRouter, ViaMaker};
-use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
+use atoll::{IoBuilder, Orientation, Tile, TileBuilder, TileWrapper};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::marker::PhantomData;
@@ -16,21 +17,31 @@ use substrate::schematic::ExportsNestedData;
 pub mod tb;
 pub mod tech;
 
+/// The interface to a clocked differential comparator.
 #[derive(Debug, Default, Clone, Io)]
 pub struct ClockedDiffComparatorIo {
+    /// The input differential pair.
     pub input: Input<DiffPair>,
+    /// The output differential pair.
     pub output: Output<DiffPair>,
+    /// The clock signal.
     pub clock: Input<Signal>,
+    /// The VDD rail.
     pub vdd: InOut<Signal>,
+    /// The VSS rail.
     pub vss: InOut<Signal>,
 }
 
+/// The input pair device kind of the comparator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum InputKind {
+    /// A comparator with an NMOS input pair.
     N,
+    /// A comparator with a PMOS input pair.
     P,
 }
 
+/// The parameters of the [`StrongArm`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct StrongArmParams {
     pub half_tail_w: i64,
@@ -159,8 +170,8 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             InputKind::P => (
                 TileKind::P,
                 TileKind::N,
-                io.schematic.top_io.vss,
                 io.schematic.top_io.vdd,
+                io.schematic.top_io.vss,
             ),
         };
         let half_tail_params = MosTileParams::new(input_kind, self.0.half_tail_w);
@@ -433,6 +444,15 @@ pub struct StrongArm<T>(
     StrongArmParams,
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
+
+impl<T, PDK: Pdk + Schema> Dut<PDK> for TileWrapper<StrongArm<T>>
+where
+    StrongArm<T>: Tile<PDK> + Block<Io = ClockedDiffComparatorIo>,
+{
+    fn input_kind(&self) -> InputKind {
+        self.0.input_kind
+    }
+}
 
 impl<T> StrongArm<T> {
     pub fn new(params: StrongArmParams) -> Self {

@@ -24,7 +24,7 @@ use substrate::simulation::data::{tran, FromSaved, Save, SaveTb};
 use substrate::simulation::options::SimOption;
 use substrate::simulation::{SimController, SimulationContext, Simulator, Testbench};
 
-use crate::strongarm::ClockedDiffComparatorIo;
+use crate::strongarm::{ClockedDiffComparatorIo, InputKind};
 
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq; T, C)]
 #[derive(Serialize, Deserialize)]
@@ -89,8 +89,9 @@ pub struct StrongArmTranTbNodes {
     clk: Node,
 }
 
-trait Dut<PDK: Schema>: Block<Io = ClockedDiffComparatorIo> + Schematic<PDK> + Clone {}
-impl<PDK: Schema, T: Block<Io = ClockedDiffComparatorIo> + Schematic<PDK> + Clone> Dut<PDK> for T {}
+pub trait Dut<PDK: Schema>: Block<Io = ClockedDiffComparatorIo> + Schematic<PDK> + Clone {
+    fn input_kind(&self) -> InputKind;
+}
 
 impl<T, PDK, C> ExportsNestedData for StrongArmTranTb<T, PDK, C>
 where
@@ -114,9 +115,13 @@ where
         let vinp = cell.instantiate(Vsource::dc(self.vinp));
         let vinn = cell.instantiate(Vsource::dc(self.vinn));
         let vdd = cell.instantiate(Vsource::dc(self.pvt.voltage));
+        let (val0, val1) = match self.dut.input_kind() {
+            InputKind::N => (dec!(0), self.pvt.voltage),
+            InputKind::P => (self.pvt.voltage, dec!(0)),
+        };
         let vclk = cell.instantiate(Vsource::pulse(Pulse {
-            val0: dec!(0),
-            val1: self.pvt.voltage,
+            val0,
+            val1,
             period: Some(dec!(1000)),
             width: Some(dec!(100)),
             delay: Some(dec!(10e-9)),
