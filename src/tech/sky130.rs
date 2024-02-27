@@ -1,19 +1,22 @@
-use crate::strongarm::{HasStrongArmImpl, MosTileParams, TapIo, TapTileParams, TileKind};
+use crate::buffer::HasInverterImpl;
+use crate::strongarm::{HasStrongArmImpl, HasStrongArmWithOutputBuffersImpl};
+use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::GreedyRouter;
-use atoll::{IoBuilder, Tile, TileBuilder};
+use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
 use sky130pdk::atoll::{MosLength, NmosTile, PmosTile, Sky130ViaMaker};
 use sky130pdk::Sky130Pdk;
 use substrate::arcstr;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
+use substrate::geometry::sign::Sign;
 use substrate::io::MosIo;
 use substrate::layout::ExportsLayoutData;
 use substrate::schematic::ExportsNestedData;
 
-pub struct Sky130;
+pub struct Sky130Ucie;
 
-impl HasStrongArmImpl<Sky130Pdk> for Sky130 {
+impl HasStrongArmImpl<Sky130Pdk> for Sky130Ucie {
     type MosTile = TwoFingerMosTile;
     type TapTile = TapTile;
     type ViaMaker = Sky130ViaMaker;
@@ -27,6 +30,26 @@ impl HasStrongArmImpl<Sky130Pdk> for Sky130 {
     fn via_maker() -> Self::ViaMaker {
         Sky130ViaMaker
     }
+}
+
+impl HasInverterImpl<Sky130Pdk> for Sky130Ucie {
+    type MosTile = TwoFingerMosTile;
+    type TapTile = TapTile;
+    type ViaMaker = Sky130ViaMaker;
+
+    fn mos(params: MosTileParams) -> Self::MosTile {
+        TwoFingerMosTile::new(params.w, MosLength::L150, params.kind)
+    }
+    fn tap(params: TapTileParams) -> Self::TapTile {
+        TapTile::new(params)
+    }
+    fn via_maker() -> Self::ViaMaker {
+        Sky130ViaMaker
+    }
+}
+
+impl HasStrongArmWithOutputBuffersImpl<Sky130Pdk> for Sky130Ucie {
+    const BUFFER_SPACING: i64 = 3;
 }
 
 #[derive(Serialize, Deserialize, Block, Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -185,10 +208,11 @@ impl Tile<Sky130Pdk> for TapTile {
 
 #[cfg(test)]
 mod tests {
+    use crate::buffer::{Buffer, InverterParams};
     use crate::sky130_ctx;
     use crate::strongarm::tb::{ComparatorDecision, StrongArmTranTb};
-    use crate::strongarm::tech::sky130::Sky130;
-    use crate::strongarm::{StrongArm, StrongArmParams};
+    use crate::strongarm::{InputKind, StrongArm, StrongArmParams, StrongArmWithOutputBuffers};
+    use crate::tech::sky130::Sky130Ucie;
     use atoll::TileWrapper;
     use rust_decimal::Decimal;
     use rust_decimal_macros::dec;
@@ -203,12 +227,14 @@ mod tests {
     #[test]
     fn sky130_strongarm_sim() {
         let work_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/build/strongarm_sim");
-        let dut = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
-            half_tail_w: 1_250,
-            input_pair_w: 4_000,
-            inv_input_w: 2_000,
+        let input_kind = InputKind::P;
+        let dut = TileWrapper::new(StrongArm::<Sky130Ucie>::new(StrongArmParams {
+            half_tail_w: 1_000,
+            input_pair_w: 1_000,
+            inv_input_w: 1_000,
             inv_precharge_w: 1_000,
             precharge_w: 1_000,
+            input_kind,
         }));
         let pvt = Pvt {
             corner: Sky130Corner::Tt,
@@ -217,7 +243,7 @@ mod tests {
         };
         let ctx = sky130_ctx();
 
-        for i in 3..=10 {
+        for i in 0..=10 {
             for j in [
                 dec!(-1.8),
                 dec!(-0.5),
@@ -231,8 +257,17 @@ mod tests {
                 let vinn = dec!(0.18) * Decimal::from(i);
                 let vinp = vinn + j;
 
-                if vinp < dec!(0.5) || vinp > dec!(1.8) {
-                    continue;
+                match input_kind {
+                    InputKind::P => {
+                        if (vinp + vinn) / dec!(2) > dec!(1.5) {
+                            continue;
+                        }
+                    }
+                    InputKind::N => {
+                        if (vinp + vinn) / dec!(2) < dec!(0.3) {
+                            continue;
+                        }
+                    }
                 }
 
                 let tb = StrongArmTranTb::new(dut.clone(), vinp, vinn, pvt);
@@ -260,13 +295,87 @@ mod tests {
         let netlist_path = work_dir.join("netlist.sp");
         let ctx = sky130_ctx();
 
-        let block = TileWrapper::new(StrongArm::<Sky130>::new(StrongArmParams {
-            half_tail_w: 1_250,
-            input_pair_w: 4_000,
-            inv_input_w: 2_000,
+        let block = TileWrapper::new(StrongArm::<Sky130Ucie>::new(StrongArmParams {
+            half_tail_w: 1_000,
+            input_pair_w: 1_000,
+            inv_input_w: 1_000,
             inv_precharge_w: 1_000,
             precharge_w: 1_000,
+            input_kind: InputKind::P,
         }));
+
+        let scir = ctx
+            .export_scir(block.clone())
+            .unwrap()
+            .scir
+            .convert_schema::<Sky130CommercialSchema>()
+            .unwrap()
+            .convert_schema::<Spice>()
+            .unwrap()
+            .build()
+            .unwrap();
+        Spice
+            .write_scir_netlist_to_file(&scir, netlist_path, NetlistOptions::default())
+            .expect("failed to write netlist");
+
+        ctx.write_layout(block, gds_path)
+            .expect("failed to write layout");
+    }
+
+    #[test]
+    fn sky130_buffer_lvs() {
+        let work_dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/build/buffer_lvs"));
+        let gds_path = work_dir.join("layout.gds");
+        let netlist_path = work_dir.join("netlist.sp");
+        let ctx = sky130_ctx();
+
+        let block = TileWrapper::new(Buffer::<Sky130Ucie>::new(InverterParams {
+            nmos_w: 1_000,
+            pmos_w: 1_000,
+        }));
+
+        let scir = ctx
+            .export_scir(block.clone())
+            .unwrap()
+            .scir
+            .convert_schema::<Sky130CommercialSchema>()
+            .unwrap()
+            .convert_schema::<Spice>()
+            .unwrap()
+            .build()
+            .unwrap();
+        Spice
+            .write_scir_netlist_to_file(&scir, netlist_path, NetlistOptions::default())
+            .expect("failed to write netlist");
+
+        ctx.write_layout(block, gds_path)
+            .expect("failed to write layout");
+    }
+
+    #[test]
+    fn sky130_strongarm_with_output_buffers_lvs() {
+        let work_dir = PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/build/strongarm_with_output_buffers_lvs"
+        ));
+        let gds_path = work_dir.join("layout.gds");
+        let netlist_path = work_dir.join("netlist.sp");
+        let ctx = sky130_ctx();
+
+        let block = TileWrapper::new(StrongArmWithOutputBuffers::<Sky130Ucie>::new(
+            StrongArmParams {
+                half_tail_w: 1_000,
+                input_pair_w: 1_000,
+                inv_input_w: 1_000,
+                inv_precharge_w: 1_000,
+                precharge_w: 1_000,
+                input_kind: InputKind::P,
+            },
+            InverterParams {
+                nmos_w: 1_000,
+                pmos_w: 1_000,
+            },
+        ));
 
         let scir = ctx
             .export_scir(block.clone())

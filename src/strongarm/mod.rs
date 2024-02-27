@@ -1,4 +1,6 @@
+use crate::buffer::{Buffer, BufferIo, BufferIoSchematic, HasInverterImpl, InverterParams};
 use crate::strongarm::tb::Dut;
+use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder, TileWrapper};
 use serde::{Deserialize, Serialize};
@@ -15,7 +17,6 @@ use substrate::schematic::schema::Schema;
 use substrate::schematic::ExportsNestedData;
 
 pub mod tb;
-pub mod tech;
 
 /// The interface to a clocked differential comparator.
 #[derive(Debug, Default, Clone, Io)]
@@ -44,50 +45,13 @@ pub enum InputKind {
 /// The parameters of the [`StrongArm`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct StrongArmParams {
+    /// The width of one half of the tail MOSFET.
     pub half_tail_w: i64,
     pub input_pair_w: i64,
     pub inv_input_w: i64,
     pub inv_precharge_w: i64,
     pub precharge_w: i64,
     pub input_kind: InputKind,
-}
-
-/// The IO of a tap.
-#[derive(Default, Debug, Clone, Copy, Io)]
-pub struct TapIo {
-    /// The tap contact.
-    pub x: InOut<Signal>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum TileKind {
-    N,
-    P,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct MosTileParams {
-    pub kind: TileKind,
-    pub w: i64,
-}
-
-impl MosTileParams {
-    pub fn new(kind: TileKind, w: i64) -> Self {
-        Self { kind, w }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct TapTileParams {
-    pub kind: TileKind,
-    /// Number of MOS devices this tap must span.
-    pub mos_span: i64,
-}
-
-impl TapTileParams {
-    pub fn new(kind: TileKind, mos_span: i64) -> Self {
-        Self { kind, mos_span }
-    }
 }
 
 pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
@@ -437,7 +401,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
     }
 }
 
-/// Layout assumes that PDK layer stack has a vertical layer 0.
+// Layout assumes that PDK layer stack has a vertical layer 0.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
 pub struct StrongArm<T>(
@@ -556,6 +520,139 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
             .merge(right_half.layout.io().top_io.output.n);
 
         T::post_layout_hooks(cell)?;
+
+        Ok(((), ()))
+    }
+}
+
+pub trait HasStrongArmWithOutputBuffersImpl<PDK: Pdk + Schema>:
+    HasStrongArmImpl<PDK> + HasInverterImpl<PDK>
+{
+    const BUFFER_SPACING: i64;
+
+    fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
+        Ok(())
+    }
+}
+
+// Layout assumes that PDK layer stack has a vertical layer 0.
+#[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
+pub struct StrongArmWithOutputBuffers<T>(
+    StrongArmParams,
+    InverterParams,
+    #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
+);
+
+impl<T, PDK: Pdk + Schema> Dut<PDK> for TileWrapper<StrongArmWithOutputBuffers<T>>
+where
+    StrongArmWithOutputBuffers<T>: Tile<PDK> + Block<Io = ClockedDiffComparatorIo>,
+{
+    fn input_kind(&self) -> InputKind {
+        self.0.input_kind
+    }
+}
+
+impl<T> StrongArmWithOutputBuffers<T> {
+    pub fn new(sa_params: StrongArmParams, buf_params: InverterParams) -> Self {
+        Self(sa_params, buf_params, PhantomData)
+    }
+}
+
+impl<T: Any> Block for StrongArmWithOutputBuffers<T> {
+    type Io = ClockedDiffComparatorIo;
+
+    fn id() -> ArcStr {
+        substrate::arcstr::literal!("strong_arm_with_output_buffers")
+    }
+
+    // todo: include parameters in name
+    fn name(&self) -> ArcStr {
+        substrate::arcstr::literal!("strong_arm_with_output_buffers")
+    }
+
+    fn io(&self) -> Self::Io {
+        Default::default()
+    }
+}
+
+impl<T: Any> ExportsNestedData for StrongArmWithOutputBuffers<T> {
+    type NestedData = ();
+}
+
+impl<T: Any> ExportsLayoutData for StrongArmWithOutputBuffers<T> {
+    type LayoutData = ();
+}
+
+impl<PDK: Pdk + Schema + Sized, T: HasStrongArmWithOutputBuffersImpl<PDK> + Any> Tile<PDK>
+    for StrongArmWithOutputBuffers<T>
+{
+    fn tile<'a>(
+        &self,
+        io: IoBuilder<'a, Self>,
+        cell: &mut TileBuilder<'a, PDK>,
+    ) -> substrate::error::Result<(
+        <Self as ExportsNestedData>::NestedData,
+        <Self as ExportsLayoutData>::LayoutData,
+    )> {
+        let out = cell.signal("out", DiffPair::default());
+
+        let strongarm = cell.generate_connected(
+            StrongArm::<T>::new(self.0),
+            ClockedDiffComparatorIoSchematic {
+                input: io.schematic.input.clone(),
+                output: out.clone(),
+                clock: io.schematic.clock,
+                vdd: io.schematic.vdd,
+                vss: io.schematic.vss,
+            },
+        );
+
+        let right_buf = cell
+            .generate_connected(
+                Buffer::<T>::new(self.1),
+                BufferIoSchematic {
+                    din: out.p,
+                    dout: io.schematic.output.p,
+                    vdd: io.schematic.vdd,
+                    vss: io.schematic.vss,
+                },
+            )
+            .align(&strongarm, AlignMode::CenterVertical, 0)
+            .align(&strongarm, AlignMode::ToTheRight, T::BUFFER_SPACING);
+
+        let left_buf = cell
+            .generate_connected(
+                Buffer::<T>::new(self.1),
+                BufferIoSchematic {
+                    din: out.n,
+                    dout: io.schematic.output.n,
+                    vdd: io.schematic.vdd,
+                    vss: io.schematic.vss,
+                },
+            )
+            .orient(Orientation::ReflectHoriz)
+            .align(&strongarm, AlignMode::CenterVertical, 0)
+            .align(&strongarm, AlignMode::ToTheLeft, -T::BUFFER_SPACING);
+
+        let strongarm = cell.draw(strongarm)?;
+        let right_buf = cell.draw(right_buf)?;
+        let left_buf = cell.draw(left_buf)?;
+
+        cell.set_top_layer(2);
+        cell.set_router(GreedyRouter);
+        cell.set_via_maker(<T as HasStrongArmImpl<PDK>>::via_maker());
+
+        io.layout.vdd.merge(strongarm.layout.io().vdd);
+        io.layout.vdd.merge(strongarm.layout.io().vdd);
+        io.layout.vss.merge(strongarm.layout.io().vss);
+        io.layout.clock.merge(strongarm.layout.io().clock);
+        io.layout.input.p.merge(strongarm.layout.io().input.p);
+        io.layout.input.n.merge(strongarm.layout.io().input.n);
+        io.layout.output.p.merge(right_buf.layout.io().dout);
+        io.layout.output.n.merge(left_buf.layout.io().dout);
+
+        <T as HasStrongArmWithOutputBuffersImpl<PDK>>::post_layout_hooks(cell)?;
 
         Ok(((), ()))
     }
