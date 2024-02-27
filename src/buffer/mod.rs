@@ -148,8 +148,8 @@ impl<PDK: Pdk + Schema + Sized, T: HasInverterImpl<PDK> + Any> Tile<PDK> for Inv
 
         io.layout.din.merge(nmos.layout.io().g);
         io.layout.din.merge(pmos.layout.io().g);
-        io.layout.dout.merge(nmos.layout.io().d);
-        io.layout.dout.merge(pmos.layout.io().d);
+        io.layout.dout.merge(nmos.layout.io().s);
+        io.layout.dout.merge(pmos.layout.io().s);
         io.layout.vdd.merge(ntap.layout.io().x);
         io.layout.vss.merge(ptap.layout.io().x);
 
