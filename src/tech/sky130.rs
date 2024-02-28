@@ -268,7 +268,7 @@ mod tests {
                     }
                 }
 
-                let tb = StrongArmTranTb::new(dut.clone(), vinp, vinn, pvt);
+                let tb = StrongArmTranTb::new(dut.clone(), vinp, vinn, input_kind.is_p(), pvt);
                 let decision = ctx
                     .simulate(tb, work_dir)
                     .expect("failed to run simulation")

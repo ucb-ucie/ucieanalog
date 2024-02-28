@@ -26,7 +26,7 @@ use substrate::simulation::data::{tran, FromSaved, Save, SaveTb};
 use substrate::simulation::options::SimOption;
 use substrate::simulation::{SimController, SimulationContext, Simulator, Testbench};
 
-use crate::strongarm::{ClockedDiffComparatorIo, InputKind};
+use crate::strongarm::ClockedDiffComparatorIo;
 
 /// A transient testbench that provides a differential input voltage and
 /// measures the output waveform.
@@ -35,24 +35,36 @@ use crate::strongarm::{ClockedDiffComparatorIo, InputKind};
 pub struct StrongArmTranTb<T, PDK, C> {
     /// The device-under-test.
     pub dut: T,
+
     /// The positive input voltage.
     pub vinp: Decimal,
+
     /// The negative input voltage.
     pub vinn: Decimal,
+
+    /// Whether to pass an inverted clock to the DUT.
+    ///
+    /// If set to true, the clock will be held high when idle.
+    /// The DUT should perform a comparison in response to a falling clock edge,
+    /// rather than a rising clock edge.
+    pub inverted_clk: bool,
+
     /// The PVT corner.
     pub pvt: Pvt<C>,
+
     #[serde(bound(deserialize = ""))]
     phantom: PhantomData<fn() -> PDK>,
 }
 
 impl<T, PDK, C> StrongArmTranTb<T, PDK, C> {
     /// Creates a new [`StrongArmTranTb`].
-    pub fn new(dut: T, vinp: Decimal, vinn: Decimal, pvt: Pvt<C>) -> Self {
+    pub fn new(dut: T, vinp: Decimal, vinn: Decimal, inverted_clk: bool, pvt: Pvt<C>) -> Self {
         Self {
             dut,
             vinp,
             vinn,
             pvt,
+            inverted_clk,
             phantom: PhantomData,
         }
     }
@@ -99,12 +111,6 @@ pub struct StrongArmTranTbNodes {
     clk: Node,
 }
 
-/// A clocked differential comparator that can be tested by [`StrongArmTranTb`].
-pub trait Dut<PDK: Schema>: Block<Io = ClockedDiffComparatorIo> + Schematic<PDK> + Clone {
-    /// The kind of the input pair devices of this DUT.
-    fn input_kind(&self) -> InputKind;
-}
-
 impl<T, PDK, C> ExportsNestedData for StrongArmTranTb<T, PDK, C>
 where
     StrongArmTranTb<T, PDK, C>: Block,
@@ -112,7 +118,8 @@ where
     type NestedData = StrongArmTranTbNodes;
 }
 
-impl<T: Dut<PDK>, PDK: Schema, C> Schematic<Spectre> for StrongArmTranTb<T, PDK, C>
+impl<T: Block<Io = ClockedDiffComparatorIo> + Schematic<PDK> + Clone, PDK: Schema, C>
+    Schematic<Spectre> for StrongArmTranTb<T, PDK, C>
 where
     StrongArmTranTb<T, PDK, C>: Block<Io = TestbenchIo>,
     Spectre: FromSchema<PDK>,
@@ -127,9 +134,10 @@ where
         let vinp = cell.instantiate(Vsource::dc(self.vinp));
         let vinn = cell.instantiate(Vsource::dc(self.vinn));
         let vdd = cell.instantiate(Vsource::dc(self.pvt.voltage));
-        let (val0, val1) = match self.dut.input_kind() {
-            InputKind::N => (dec!(0), self.pvt.voltage),
-            InputKind::P => (self.pvt.voltage, dec!(0)),
+        let (val0, val1) = if self.inverted_clk {
+            (self.pvt.voltage, dec!(0))
+        } else {
+            (dec!(0), self.pvt.voltage)
         };
         let vclk = cell.instantiate(Vsource::pulse(Pulse {
             val0,

@@ -1,10 +1,9 @@
 //! StrongARM latch layout generators.
 
 use crate::buffer::{Buffer, BufferIoSchematic, InverterImpl, InverterParams};
-use crate::strongarm::tb::Dut;
 use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
-use atoll::{IoBuilder, Orientation, Tile, TileBuilder, TileWrapper};
+use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::marker::PhantomData;
@@ -42,6 +41,18 @@ pub enum InputKind {
     N,
     /// A comparator with a PMOS input pair.
     P,
+}
+
+impl InputKind {
+    /// Returns true if the input kind is NMOS.
+    pub fn is_n(&self) -> bool {
+        matches!(self, InputKind::N)
+    }
+
+    /// Returns true if the input kind is PMOS.
+    pub fn is_p(&self) -> bool {
+        matches!(self, InputKind::P)
+    }
 }
 
 /// The parameters of the [`StrongArm`] layout generator.
@@ -425,15 +436,6 @@ pub struct StrongArm<T>(
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
 
-impl<T, PDK: Pdk + Schema> Dut<PDK> for TileWrapper<StrongArm<T>>
-where
-    StrongArm<T>: Tile<PDK> + Block<Io = ClockedDiffComparatorIo>,
-{
-    fn input_kind(&self) -> InputKind {
-        self.0.input_kind
-    }
-}
-
 impl<T> StrongArm<T> {
     /// Creates a new [`StrongArm`].
     pub fn new(params: StrongArmParams) -> Self {
@@ -564,15 +566,6 @@ pub struct StrongArmWithOutputBuffers<T>(
     InverterParams,
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
-
-impl<T, PDK: Pdk + Schema> Dut<PDK> for TileWrapper<StrongArmWithOutputBuffers<T>>
-where
-    StrongArmWithOutputBuffers<T>: Tile<PDK> + Block<Io = ClockedDiffComparatorIo>,
-{
-    fn input_kind(&self) -> InputKind {
-        self.0.input_kind
-    }
-}
 
 impl<T> StrongArmWithOutputBuffers<T> {
     /// Creates a new [`StrongArmWithOutputBuffers`].
