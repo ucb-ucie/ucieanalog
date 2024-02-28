@@ -17,7 +17,7 @@ use substrate::arcstr;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::io::schematic::{Bundle, HardwareType, Node};
-use substrate::io::{DiffPair, TestbenchIo};
+use substrate::io::{DiffPair, Signal, TestbenchIo};
 use substrate::pdk::corner::Pvt;
 use substrate::schematic::schema::Schema;
 use substrate::schematic::{Cell, CellBuilder, ExportsNestedData, NestedData, Schematic};
@@ -131,9 +131,14 @@ where
     ) -> substrate::error::Result<Self::NestedData> {
         let dut = cell.sub_builder::<PDK>().instantiate(self.dut.clone());
 
-        let vinp = cell.instantiate(Vsource::dc(self.vinp));
-        let vinn = cell.instantiate(Vsource::dc(self.vinn));
-        let vdd = cell.instantiate(Vsource::dc(self.pvt.voltage));
+        let vinp = cell.signal("vinp", Signal);
+        let vinn = cell.signal("vinn", Signal);
+        let vdd = cell.signal("vdd", Signal);
+        let clk = cell.signal("clk", Signal);
+
+        let vvinp = cell.instantiate(Vsource::dc(self.vinp));
+        let vvinn = cell.instantiate(Vsource::dc(self.vinn));
+        let vvdd = cell.instantiate(Vsource::dc(self.pvt.voltage));
         let (val0, val1) = if self.inverted_clk {
             (self.pvt.voltage, dec!(0))
         } else {
@@ -149,22 +154,23 @@ where
             fall: Some(dec!(100e-12)),
         }));
 
-        cell.connect(io.vss, vinp.io().n);
-        cell.connect(io.vss, vinn.io().n);
-        cell.connect(io.vss, vdd.io().n);
+        cell.connect(io.vss, vvinp.io().n);
+        cell.connect(io.vss, vvinn.io().n);
+        cell.connect(io.vss, vvdd.io().n);
         cell.connect(io.vss, vclk.io().n);
+        cell.connect(vinp, vvinp.io().p);
+        cell.connect(vinn, vvinn.io().p);
+        cell.connect(vdd, vvdd.io().p);
+        cell.connect(clk, vclk.io().p);
 
         let output = cell.signal("output", DiffPair::default());
 
         cell.connect(
             Bundle::<ClockedDiffComparatorIo> {
-                input: Bundle::<DiffPair> {
-                    p: *vinp.io().p,
-                    n: *vinn.io().p,
-                },
+                input: Bundle::<DiffPair> { p: vinp, n: vinn },
                 output: output.clone(),
-                clock: *vclk.io().p,
-                vdd: *vdd.io().p,
+                clock: clk,
+                vdd,
                 vss: io.vss,
             },
             dut.io(),
@@ -173,9 +179,9 @@ where
         Ok(StrongArmTranTbNodes {
             vop: output.p,
             von: output.n,
-            vinn: *vinn.io().p,
-            vinp: *vinp.io().p,
-            clk: *vclk.io().p,
+            vinn,
+            vinp,
+            clk,
         })
     }
 }
