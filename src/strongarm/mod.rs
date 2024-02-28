@@ -666,7 +666,6 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmWithOutputBuffersImpl<PDK> + Any> Ti
         cell.set_via_maker(<T as StrongArmImpl<PDK>>::via_maker());
 
         io.layout.vdd.merge(strongarm.layout.io().vdd);
-        io.layout.vdd.merge(strongarm.layout.io().vdd);
         io.layout.vss.merge(strongarm.layout.io().vss);
         io.layout.clock.merge(strongarm.layout.io().clock);
         io.layout.input.p.merge(strongarm.layout.io().input.p);
