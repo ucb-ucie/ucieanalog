@@ -3,11 +3,9 @@
 //! physical layer implementation.
 #![warn(missing_docs)]
 
-use serde::{Deserialize, Serialize};
 use sky130pdk::Sky130Pdk;
 use spectre::Spectre;
 use substrate::context::{Context, PdkContext};
-use substrate::io::{InOut, Io, Signal};
 
 pub mod buffer;
 pub mod strongarm;

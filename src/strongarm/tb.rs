@@ -1,3 +1,5 @@
+//! StrongARM testbenches.
+
 use approx::abs_diff_eq;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
@@ -26,18 +28,25 @@ use substrate::simulation::{SimController, SimulationContext, Simulator, Testben
 
 use crate::strongarm::{ClockedDiffComparatorIo, InputKind};
 
+/// A transient testbench that provides a differential input voltage and
+/// measures the output waveform.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq; T, C)]
 #[derive(Serialize, Deserialize)]
 pub struct StrongArmTranTb<T, PDK, C> {
+    /// The device-under-test.
     pub dut: T,
+    /// The positive input voltage.
     pub vinp: Decimal,
+    /// The negative input voltage.
     pub vinn: Decimal,
+    /// The PVT corner.
     pub pvt: Pvt<C>,
     #[serde(bound(deserialize = ""))]
     phantom: PhantomData<fn() -> PDK>,
 }
 
 impl<T, PDK, C> StrongArmTranTb<T, PDK, C> {
+    /// Creates a new [`StrongArmTranTb`].
     pub fn new(dut: T, vinp: Decimal, vinn: Decimal, pvt: Pvt<C>) -> Self {
         Self {
             dut,
@@ -80,6 +89,7 @@ impl<
     }
 }
 
+/// Nodes measured by [`StrongArmTranTb`].
 #[derive(Clone, Debug, Hash, PartialEq, Eq, NestedData)]
 pub struct StrongArmTranTbNodes {
     vop: Node,
@@ -89,7 +99,9 @@ pub struct StrongArmTranTbNodes {
     clk: Node,
 }
 
+/// A clocked differential comparator that can be tested by [`StrongArmTranTb`].
 pub trait Dut<PDK: Schema>: Block<Io = ClockedDiffComparatorIo> + Schematic<PDK> + Clone {
+    /// The kind of the input pair devices of this DUT.
     fn input_kind(&self) -> InputKind;
 }
 
@@ -160,6 +172,7 @@ where
     }
 }
 
+/// The resulting waveforms of a [`StrongArmTranTb`].
 #[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
 pub struct ComparatorSim {
     t: tran::Time,

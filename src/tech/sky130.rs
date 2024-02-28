@@ -1,22 +1,24 @@
-use crate::buffer::HasInverterImpl;
-use crate::strongarm::{HasStrongArmImpl, HasStrongArmWithOutputBuffersImpl};
+//! SKY130-specific implementations.
+
+use crate::buffer::InverterImpl;
+use crate::strongarm::{StrongArmImpl, StrongArmWithOutputBuffersImpl};
 use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::GreedyRouter;
-use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
+use atoll::{IoBuilder, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
 use sky130pdk::atoll::{MosLength, NmosTile, PmosTile, Sky130ViaMaker};
 use sky130pdk::Sky130Pdk;
 use substrate::arcstr;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
-use substrate::geometry::sign::Sign;
 use substrate::io::MosIo;
 use substrate::layout::ExportsLayoutData;
 use substrate::schematic::ExportsNestedData;
 
+/// A SKY130 UCIe implementation.
 pub struct Sky130Ucie;
 
-impl HasStrongArmImpl<Sky130Pdk> for Sky130Ucie {
+impl StrongArmImpl<Sky130Pdk> for Sky130Ucie {
     type MosTile = TwoFingerMosTile;
     type TapTile = TapTile;
     type ViaMaker = Sky130ViaMaker;
@@ -32,7 +34,7 @@ impl HasStrongArmImpl<Sky130Pdk> for Sky130Ucie {
     }
 }
 
-impl HasInverterImpl<Sky130Pdk> for Sky130Ucie {
+impl InverterImpl<Sky130Pdk> for Sky130Ucie {
     type MosTile = TwoFingerMosTile;
     type TapTile = TapTile;
     type ViaMaker = Sky130ViaMaker;
@@ -48,10 +50,11 @@ impl HasInverterImpl<Sky130Pdk> for Sky130Ucie {
     }
 }
 
-impl HasStrongArmWithOutputBuffersImpl<Sky130Pdk> for Sky130Ucie {
+impl StrongArmWithOutputBuffersImpl<Sky130Pdk> for Sky130Ucie {
     const BUFFER_SPACING: i64 = 3;
 }
 
+/// A two-finger MOS tile.
 #[derive(Serialize, Deserialize, Block, Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[substrate(io = "MosIo")]
 pub struct TwoFingerMosTile {
@@ -61,16 +64,9 @@ pub struct TwoFingerMosTile {
 }
 
 impl TwoFingerMosTile {
+    /// Creates a new [`TwoFingerMosTile`].
     pub fn new(w: i64, l: MosLength, kind: TileKind) -> Self {
         Self { w, l, kind }
-    }
-
-    pub fn pmos(w: i64, l: MosLength) -> Self {
-        Self::new(w, l, TileKind::P)
-    }
-
-    pub fn nmos(w: i64, l: MosLength) -> Self {
-        Self::new(w, l, TileKind::N)
     }
 }
 
@@ -130,12 +126,14 @@ impl Tile<Sky130Pdk> for TwoFingerMosTile {
         Ok(((), ()))
     }
 }
+
 /// A tile containing a N/P tap for biasing an N-well or P-substrate.
 /// These can be used to connect to the body terminals of MOS devices.
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TapTile(TapTileParams);
 
 impl TapTile {
+    /// Creates a new [`TapTile`].
     pub fn new(params: TapTileParams) -> Self {
         Self(params)
     }

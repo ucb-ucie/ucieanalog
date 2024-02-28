@@ -1,7 +1,8 @@
-use crate::strongarm::tb::Dut;
+//! Buffer layout generators.
+
 use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
-use atoll::{IoBuilder, Orientation, Tile, TileBuilder, TileWrapper};
+use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::marker::PhantomData;
@@ -9,7 +10,7 @@ use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
 use substrate::geometry::align::AlignMode;
-use substrate::io::{DiffPair, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
+use substrate::io::{InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::ExportsLayoutData;
 use substrate::pdk::Pdk;
 use substrate::schematic::schema::Schema;
@@ -37,28 +38,38 @@ pub struct InverterParams {
     pub pmos_w: i64,
 }
 
-pub trait HasInverterImpl<PDK: Pdk + Schema> {
+/// An inverter implementation.
+pub trait InverterImpl<PDK: Pdk + Schema> {
+    /// The MOS tile used to implement the pull-up and pull-down transistors.
     type MosTile: Tile<PDK> + Block<Io = MosIo> + Clone;
+    /// The tap tile.
     type TapTile: Tile<PDK> + Block<Io = TapIo> + Clone;
+    /// A PDK-specific via maker.
     type ViaMaker: ViaMaker<PDK>;
 
+    /// Creates an instance of the MOS tile.
     fn mos(params: MosTileParams) -> Self::MosTile;
+    /// Creates an instance of the tap tile.
     fn tap(params: TapTileParams) -> Self::TapTile;
+    /// Creates a PDK-specific via maker.
     fn via_maker() -> Self::ViaMaker;
+    /// Additional layout hooks to run after the inverter layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
     }
 }
 
+/// An inverter.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
-struct Inverter<T>(
+pub struct Inverter<T>(
     InverterParams,
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
 
 impl<T> Inverter<T> {
-    fn new(params: InverterParams) -> Self {
+    /// Creates a new [`Inverter`].
+    pub fn new(params: InverterParams) -> Self {
         Self(params, PhantomData)
     }
 }
@@ -88,7 +99,7 @@ impl<T: Any> ExportsLayoutData for Inverter<T> {
     type LayoutData = ();
 }
 
-impl<PDK: Pdk + Schema + Sized, T: HasInverterImpl<PDK> + Any> Tile<PDK> for Inverter<T> {
+impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Inverter<T> {
     fn tile<'a>(
         &self,
         io: IoBuilder<'a, Self>,
@@ -159,7 +170,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasInverterImpl<PDK> + Any> Tile<PDK> for Inv
     }
 }
 
-/// Layout assumes that PDK layer stack has a vertical layer 0.
+/// A buffer.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
 pub struct Buffer<T>(
@@ -168,6 +179,7 @@ pub struct Buffer<T>(
 );
 
 impl<T> Buffer<T> {
+    /// Creates a new [`Buffer`].
     pub fn new(params: InverterParams) -> Self {
         Self(params, PhantomData)
     }
@@ -198,7 +210,7 @@ impl<T: Any> ExportsLayoutData for Buffer<T> {
     type LayoutData = ();
 }
 
-impl<PDK: Pdk + Schema + Sized, T: HasInverterImpl<PDK> + Any> Tile<PDK> for Buffer<T> {
+impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Buffer<T> {
     fn tile<'a>(
         &self,
         io: IoBuilder<'a, Self>,

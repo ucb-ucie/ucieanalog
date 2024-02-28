@@ -1,4 +1,6 @@
-use crate::buffer::{Buffer, BufferIo, BufferIoSchematic, HasInverterImpl, InverterParams};
+//! StrongARM latch layout generators.
+
+use crate::buffer::{Buffer, BufferIoSchematic, InverterImpl, InverterParams};
 use crate::strongarm::tb::Dut;
 use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
@@ -45,23 +47,36 @@ pub enum InputKind {
 /// The parameters of the [`StrongArm`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct StrongArmParams {
-    /// The width of one half of the tail MOSFET.
+    /// The width of one half of the tail MOS device.
     pub half_tail_w: i64,
+    /// The width of an input pair MOS device.
     pub input_pair_w: i64,
+    /// The width of the inverter MOS devices connected to the input pair.
     pub inv_input_w: i64,
+    /// The width of the inverter MOS devices connected to the precharge devices.
     pub inv_precharge_w: i64,
+    /// The width of the precharge MOS devices.
     pub precharge_w: i64,
+    /// The kind of the input pair MOS devices.
     pub input_kind: InputKind,
 }
 
-pub trait HasStrongArmImpl<PDK: Pdk + Schema> {
+/// A StrongARM latch implementation.
+pub trait StrongArmImpl<PDK: Pdk + Schema> {
+    /// The MOS tile.
     type MosTile: Tile<PDK> + Block<Io = MosIo> + Clone;
+    /// The tap tile.
     type TapTile: Tile<PDK> + Block<Io = TapIo> + Clone;
+    /// A PDK-specific via maker.
     type ViaMaker: ViaMaker<PDK>;
 
+    /// Creates an instance of the MOS tile.
     fn mos(params: MosTileParams) -> Self::MosTile;
+    /// Creates an instance of the tap tile.
     fn tap(params: TapTileParams) -> Self::TapTile;
+    /// Creates a PDK-specific via maker.
     fn via_maker() -> Self::ViaMaker;
+    /// Additional layout hooks to run after the strongARM layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
     }
@@ -115,7 +130,7 @@ impl<T: Any> ExportsLayoutData for StrongArmHalf<T> {
     type LayoutData = ();
 }
 
-impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for StrongArmHalf<T> {
+impl<PDK: Pdk + Schema + Sized, T: StrongArmImpl<PDK> + Any> Tile<PDK> for StrongArmHalf<T> {
     fn tile<'a>(
         &self,
         io: IoBuilder<'a, Self>,
@@ -401,6 +416,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
     }
 }
 
+/// A StrongARM latch.
 // Layout assumes that PDK layer stack has a vertical layer 0.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
@@ -419,6 +435,7 @@ where
 }
 
 impl<T> StrongArm<T> {
+    /// Creates a new [`StrongArm`].
     pub fn new(params: StrongArmParams) -> Self {
         Self(params, PhantomData)
     }
@@ -449,7 +466,7 @@ impl<T: Any> ExportsLayoutData for StrongArm<T> {
     type LayoutData = ();
 }
 
-impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for StrongArm<T> {
+impl<PDK: Pdk + Schema + Sized, T: StrongArmImpl<PDK> + Any> Tile<PDK> for StrongArm<T> {
     fn tile<'a>(
         &self,
         io: IoBuilder<'a, Self>,
@@ -525,16 +542,20 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmImpl<PDK> + Any> Tile<PDK> for St
     }
 }
 
-pub trait HasStrongArmWithOutputBuffersImpl<PDK: Pdk + Schema>:
-    HasStrongArmImpl<PDK> + HasInverterImpl<PDK>
+/// A StrongARM latch with output buffers implementation.
+pub trait StrongArmWithOutputBuffersImpl<PDK: Pdk + Schema>:
+    StrongArmImpl<PDK> + InverterImpl<PDK>
 {
+    /// The spacing between the StrongARM and the buffers in ATOLL grid coordinates.
     const BUFFER_SPACING: i64;
 
+    /// Additional layout hooks to run after the layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
     }
 }
 
+/// A StrongARM latch with output buffers.
 // Layout assumes that PDK layer stack has a vertical layer 0.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
@@ -554,6 +575,7 @@ where
 }
 
 impl<T> StrongArmWithOutputBuffers<T> {
+    /// Creates a new [`StrongArmWithOutputBuffers`].
     pub fn new(sa_params: StrongArmParams, buf_params: InverterParams) -> Self {
         Self(sa_params, buf_params, PhantomData)
     }
@@ -584,7 +606,7 @@ impl<T: Any> ExportsLayoutData for StrongArmWithOutputBuffers<T> {
     type LayoutData = ();
 }
 
-impl<PDK: Pdk + Schema + Sized, T: HasStrongArmWithOutputBuffersImpl<PDK> + Any> Tile<PDK>
+impl<PDK: Pdk + Schema + Sized, T: StrongArmWithOutputBuffersImpl<PDK> + Any> Tile<PDK>
     for StrongArmWithOutputBuffers<T>
 {
     fn tile<'a>(
@@ -641,7 +663,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmWithOutputBuffersImpl<PDK> + Any>
 
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
-        cell.set_via_maker(<T as HasStrongArmImpl<PDK>>::via_maker());
+        cell.set_via_maker(<T as StrongArmImpl<PDK>>::via_maker());
 
         io.layout.vdd.merge(strongarm.layout.io().vdd);
         io.layout.vdd.merge(strongarm.layout.io().vdd);
@@ -652,7 +674,7 @@ impl<PDK: Pdk + Schema + Sized, T: HasStrongArmWithOutputBuffersImpl<PDK> + Any>
         io.layout.output.p.merge(right_buf.layout.io().dout);
         io.layout.output.n.merge(left_buf.layout.io().dout);
 
-        <T as HasStrongArmWithOutputBuffersImpl<PDK>>::post_layout_hooks(cell)?;
+        <T as StrongArmWithOutputBuffersImpl<PDK>>::post_layout_hooks(cell)?;
 
         Ok(((), ()))
     }
