@@ -50,3 +50,28 @@ impl TapTileParams {
         Self { kind, mos_span }
     }
 }
+
+/// The IO of a resistor.
+#[derive(Default, Debug, Clone, Copy, Io)]
+pub struct ResistorIo {
+    /// The positive terminal.
+    pub p: InOut<Signal>,
+    /// The negative terminal.
+    pub n: InOut<Signal>,
+    /// The body terminal.
+    pub b: InOut<Signal>,
+}
+
+/// Resistor tile parameters.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct ResistorTileParams {
+    /// Resistor length.
+    pub l: i64,
+}
+
+impl ResistorTileParams {
+    /// Creates a new [`ResistorTileParams`].
+    pub fn new(l: i64) -> Self {
+        Self { l }
+    }
+}

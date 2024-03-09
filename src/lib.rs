@@ -8,6 +8,7 @@ use spectre::Spectre;
 use substrate::context::{Context, PdkContext};
 
 pub mod buffer;
+pub mod driver;
 pub mod strongarm;
 pub mod tech;
 pub mod tiles;
