@@ -39,10 +39,14 @@ pub struct DriverUnitIo {
 /// The parameters of the [`DriverUnit`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct DriverUnitParams {
-    /// The width of the pull-up transistors of the NOR gate.
-    pub nor_pu_w: i64,
-    /// The width of the pull-down transistors of the NOR gate.
-    pub nor_pd_w: i64,
+    /// The width of the enable pull-up transistor of the NOR gate.
+    pub nor_pu_en_w: i64,
+    /// The width of the data pull-up transistor of the NOR gate.
+    pub nor_pu_data_w: i64,
+    /// The width of the enable pull-down transistor of the NOR gate.
+    pub nor_pd_en_w: i64,
+    /// The width of the data pull-down transistor of the NOR gate.
+    pub nor_pd_data_w: i64,
     /// Half of the width of the driver pull-down transistor.
     pub driver_pd_w: i64,
     /// The length of the pull-down resistor.
@@ -51,10 +55,14 @@ pub struct DriverUnitParams {
     pub pu_res_l: i64,
     /// Half of the width of the driver pull-up transistor.
     pub driver_pu_w: i64,
-    /// The width of the pull-up transistors of the NAND gate.
-    pub nand_pu_w: i64,
-    /// The width of the pull-down transistors of the NAND gate.
-    pub nand_pd_w: i64,
+    /// The width of the enable pull-up transistor of the NAND gate.
+    pub nand_pu_en_w: i64,
+    /// The width of the data pull-up transistor of the NAND gate.
+    pub nand_pu_data_w: i64,
+    /// The width of the enable pull-down transistor of the NAND gate.
+    pub nand_pd_en_w: i64,
+    /// The width of the data pull-down transistor of the NAND gate.
+    pub nand_pd_data_w: i64,
 }
 
 /// A driver implementation.
@@ -131,31 +139,78 @@ impl<PDK: Pdk + Schema + Sized, T: DriverImpl<PDK> + Any> Tile<PDK> for DriverUn
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
+        let nor_pu_en_params = MosTileParams::new(TileKind::P, self.0.nor_pu_en_w);
+        let nor_pu_data_params = MosTileParams::new(TileKind::P, self.0.nor_pu_data_w);
+        let nor_pd_en_params = MosTileParams::new(TileKind::N, self.0.nor_pd_en_w);
+        let nor_pd_data_params = MosTileParams::new(TileKind::N, self.0.nor_pd_data_w);
         let driver_pd_params = MosTileParams::new(TileKind::N, self.0.driver_pd_w);
-        let pd_res = ResistorTileParams::new(self.0.pd_res_l);
-        let pu_res = ResistorTileParams::new(self.0.pu_res_l);
+        let pd_res_params = ResistorTileParams::new(self.0.pd_res_l);
+        let pu_res_params = ResistorTileParams::new(self.0.pu_res_l);
         let driver_pu_params = MosTileParams::new(TileKind::P, self.0.driver_pu_w);
+        let nand_pu_en_params = MosTileParams::new(TileKind::P, self.0.nand_pu_en_w);
+        let nand_pu_data_params = MosTileParams::new(TileKind::P, self.0.nand_pu_data_w);
+        let nand_pd_en_params = MosTileParams::new(TileKind::N, self.0.nand_pd_en_w);
+        let nand_pd_data_params = MosTileParams::new(TileKind::N, self.0.nand_pd_data_w);
 
+        let nor_x = cell.signal("nor_x", Signal::new());
+        let nand_x = cell.signal("nand_x", Signal::new());
+        let pd_en = cell.signal("pd_en", Signal::new());
+        let pu_en = cell.signal("pu_en", Signal::new());
         let pd_x = cell.signal("pd_x", Signal::new());
         let pu_x = cell.signal("pu_x", Signal::new());
 
-        let mut driver_pd_pair = (0..2)
-            .map(|_| {
-                cell.generate_connected(
-                    T::mos(driver_pd_params),
-                    MosIoSchematic {
-                        d: io.schematic.vss,
-                        g: io.schematic.din,
-                        s: pd_x,
-                        b: io.schematic.vss,
-                    },
-                )
-                .orient(Orientation::ReflectVert)
-            })
-            .collect::<Vec<_>>();
+        let mut nor_pu_en = cell
+            .generate_connected(
+                T::mos(nor_pu_en_params),
+                MosIoSchematic {
+                    d: io.schematic.vdd,
+                    g: io.schematic.pd_ctl,
+                    s: nor_x,
+                    b: io.schematic.vdd,
+                },
+            )
+            .orient(Orientation::ReflectVert);
+        let mut nor_pu_data = cell.generate_connected(
+            T::mos(nor_pu_data_params),
+            MosIoSchematic {
+                d: nor_x,
+                g: io.schematic.din,
+                s: pd_en,
+                b: io.schematic.vdd,
+            },
+        );
+        let mut nor_pd_en = cell.generate_connected(
+            T::mos(nor_pd_en_params),
+            MosIoSchematic {
+                d: pd_en,
+                g: io.schematic.pu_ctl,
+                s: io.schematic.vss,
+                b: io.schematic.vss,
+            },
+        );
+        let mut nor_pd_data = cell.generate_connected(
+            T::mos(nor_pd_data_params),
+            MosIoSchematic {
+                d: pd_en,
+                g: io.schematic.din,
+                s: io.schematic.vss,
+                b: io.schematic.vss,
+            },
+        );
+        let mut driver_pd = cell
+            .generate_connected(
+                T::mos(driver_pd_params),
+                MosIoSchematic {
+                    d: io.schematic.vss,
+                    g: io.schematic.din,
+                    s: pd_x,
+                    b: io.schematic.vss,
+                },
+            )
+            .orient(Orientation::ReflectVert);
         let mut pd_res = cell
             .generate_connected(
-                T::resistor(pd_res),
+                T::resistor(pd_res_params),
                 ResistorIoSchematic {
                     p: io.schematic.dout,
                     n: pd_x,
@@ -164,76 +219,135 @@ impl<PDK: Pdk + Schema + Sized, T: DriverImpl<PDK> + Any> Tile<PDK> for DriverUn
             )
             .orient(Orientation::ReflectVert);
         let mut pu_res = cell.generate_connected(
-            T::resistor(pu_res),
+            T::resistor(pu_res_params),
             ResistorIoSchematic {
                 p: io.schematic.dout,
                 n: pu_x,
                 b: io.schematic.vdd,
             },
         );
-        let mut driver_pu_pair = (0..2)
-            .map(|_| {
-                cell.generate_connected(
-                    T::mos(driver_pu_params),
-                    MosIoSchematic {
-                        d: io.schematic.vdd,
-                        g: io.schematic.din,
-                        s: pu_x,
-                        b: io.schematic.vdd,
-                    },
-                )
-            })
-            .collect::<Vec<_>>();
+        let mut driver_pu = cell.generate_connected(
+            T::mos(driver_pu_params),
+            MosIoSchematic {
+                d: io.schematic.vdd,
+                g: io.schematic.din,
+                s: pu_x,
+                b: io.schematic.vdd,
+            },
+        );
+        let mut nand_pu_en = cell
+            .generate_connected(
+                T::mos(nand_pu_en_params),
+                MosIoSchematic {
+                    d: pu_en,
+                    g: io.schematic.pu_ctl,
+                    s: io.schematic.vdd,
+                    b: io.schematic.vdd,
+                },
+            )
+            .orient(Orientation::ReflectVert);
+        let mut nand_pu_data = cell.generate_connected(
+            T::mos(nand_pu_data_params),
+            MosIoSchematic {
+                d: pu_en,
+                g: io.schematic.din,
+                s: io.schematic.vdd,
+                b: io.schematic.vdd,
+            },
+        );
+        let mut nand_pd_en = cell.generate_connected(
+            T::mos(nand_pd_en_params),
+            MosIoSchematic {
+                d: io.schematic.vss,
+                g: io.schematic.pd_ctl,
+                s: nand_x,
+                b: io.schematic.vss,
+            },
+        );
+        let mut nand_pd_data = cell.generate_connected(
+            T::mos(nand_pd_data_params),
+            MosIoSchematic {
+                d: nand_x,
+                g: io.schematic.din,
+                s: pu_en,
+                b: io.schematic.vss,
+            },
+        );
 
-        let mut ptap = cell.generate(T::tap(TapTileParams::new(TileKind::P, 2)));
-        let ntap = cell.generate(T::tap(TapTileParams::new(TileKind::N, 2)));
+        let mut ntap_bot = cell.generate(T::tap(TapTileParams::new(TileKind::N, 1)));
+        let mut ptap = cell.generate(T::tap(TapTileParams::new(TileKind::P, 1)));
+        let mut ntap = cell.generate(T::tap(TapTileParams::new(TileKind::N, 1)));
+        let ptap_top = cell.generate(T::tap(TapTileParams::new(TileKind::P, 1)));
+        cell.connect(ntap_bot.io().x, io.schematic.vdd);
         cell.connect(ptap.io().x, io.schematic.vss);
         cell.connect(ntap.io().x, io.schematic.vdd);
+        cell.connect(ptap_top.io().x, io.schematic.vss);
 
-        driver_pu_pair[0].align_mut(&ntap, AlignMode::Left, 0);
-        driver_pu_pair[0].align_mut(&ntap, AlignMode::Beneath, 0);
-        let prev_bounds = driver_pu_pair[0].lcm_bounds();
-        driver_pu_pair[1].align_rect_mut(prev_bounds, AlignMode::ToTheRight, 0);
-        driver_pu_pair[1].align_rect_mut(prev_bounds, AlignMode::Bottom, 0);
+        nand_pd_en.align_mut(&ptap_top, AlignMode::Left, 0);
+        nand_pd_en.align_mut(&ptap_top, AlignMode::Beneath, 0);
+        nand_pd_data.align_mut(&nand_pd_en, AlignMode::Left, 0);
+        nand_pd_data.align_mut(&nand_pd_en, AlignMode::Beneath, 0);
+        nand_pu_data.align_mut(&nand_pd_data, AlignMode::Left, 0);
+        nand_pu_data.align_mut(&nand_pd_data, AlignMode::Beneath, 0);
+        nand_pu_en.align_mut(&nand_pu_data, AlignMode::Left, 0);
+        nand_pu_en.align_mut(&nand_pu_data, AlignMode::Beneath, 0);
 
-        pu_res.align_mut(&driver_pu_pair[0], AlignMode::Left, 0);
-        pu_res.align_mut(&driver_pu_pair[0], AlignMode::Beneath, 0);
+        ntap.align_mut(&nand_pu_en, AlignMode::Left, 0);
+        ntap.align_mut(&nand_pu_en, AlignMode::Beneath, 0);
+
+        driver_pu.align_mut(&ntap, AlignMode::Left, 0);
+        driver_pu.align_mut(&ntap, AlignMode::Beneath, 0);
+
+        pu_res.align_mut(&driver_pu, AlignMode::Left, 0);
+        pu_res.align_mut(&driver_pu, AlignMode::Beneath, 0);
 
         pd_res.align_mut(&pu_res, AlignMode::Left, 0);
         pd_res.align_mut(&pu_res, AlignMode::Beneath, 0);
 
-        driver_pd_pair[0].align_mut(&pd_res, AlignMode::Left, 0);
-        driver_pd_pair[0].align_mut(&pd_res, AlignMode::Beneath, 0);
-        let prev_bounds = driver_pd_pair[0].lcm_bounds();
-        driver_pd_pair[1].align_rect_mut(prev_bounds, AlignMode::ToTheRight, 0);
-        driver_pd_pair[1].align_rect_mut(prev_bounds, AlignMode::Bottom, 0);
+        driver_pd.align_mut(&pd_res, AlignMode::Left, 0);
+        driver_pd.align_mut(&pd_res, AlignMode::Beneath, 0);
 
-        ptap.align_mut(&driver_pd_pair[0], AlignMode::Left, 0);
-        ptap.align_mut(&driver_pd_pair[0], AlignMode::Beneath, 0);
+        ptap.align_mut(&driver_pd, AlignMode::Left, 0);
+        ptap.align_mut(&driver_pd, AlignMode::Beneath, 0);
 
-        let driver_pd_pair = driver_pd_pair
-            .into_iter()
-            .map(|mos| cell.draw(mos))
-            .collect::<Result<Vec<_>>>()?;
+        nor_pd_en.align_mut(&ptap, AlignMode::Left, 0);
+        nor_pd_en.align_mut(&ptap, AlignMode::Beneath, 0);
+        nor_pd_data.align_mut(&nor_pd_en, AlignMode::Left, 0);
+        nor_pd_data.align_mut(&nor_pd_en, AlignMode::Beneath, 0);
+        nor_pu_data.align_mut(&nor_pd_data, AlignMode::Left, 0);
+        nor_pu_data.align_mut(&nor_pd_data, AlignMode::Beneath, 0);
+        nor_pu_en.align_mut(&nor_pu_data, AlignMode::Left, 0);
+        nor_pu_en.align_mut(&nor_pu_data, AlignMode::Beneath, 0);
+
+        ntap_bot.align_mut(&nor_pu_en, AlignMode::Left, 0);
+        ntap_bot.align_mut(&nor_pu_en, AlignMode::Beneath, 0);
+
+        let nor_pd_en = cell.draw(nor_pd_en)?;
+        let nor_pd_data = cell.draw(nor_pd_data)?;
+        let nor_pu_en = cell.draw(nor_pu_en)?;
+        let nor_pu_data = cell.draw(nor_pu_data)?;
+        let driver_pd = cell.draw(driver_pd)?;
         let pd_res = cell.draw(pd_res)?;
         let pu_res = cell.draw(pu_res)?;
-        let driver_pu_pair = driver_pu_pair
-            .into_iter()
-            .map(|mos| cell.draw(mos))
-            .collect::<Result<Vec<_>>>()?;
+        let driver_pu = cell.draw(driver_pu)?;
+        let nand_pd_en = cell.draw(nand_pd_en)?;
+        let nand_pd_data = cell.draw(nand_pd_data)?;
+        let nand_pu_en = cell.draw(nand_pu_en)?;
+        let nand_pu_data = cell.draw(nand_pu_data)?;
+
+        let ntap_bot = cell.draw(ntap_bot)?;
         let ptap = cell.draw(ptap)?;
         let ntap = cell.draw(ntap)?;
+        let ptap_top = cell.draw(ptap_top)?;
 
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
 
-        io.layout.din.merge(driver_pd_pair[0].layout.io().g);
-        io.layout.din.merge(driver_pu_pair[0].layout.io().g);
-        io.layout.dout.merge(driver_pd_pair[0].layout.io().s);
-        io.layout.dout.merge(driver_pu_pair[0].layout.io().s);
-        io.layout.pu_ctl.merge(driver_pu_pair[0].layout.io().g);
-        io.layout.pd_ctl.merge(driver_pd_pair[0].layout.io().s);
+        io.layout.din.merge(nor_pd_data.layout.io().g);
+        io.layout.dout.merge(pu_res.layout.io().p);
+        io.layout.pu_ctl.merge(nor_pd_en.layout.io().g);
+        io.layout.pd_ctl.merge(nand_pd_en.layout.io().g);
         io.layout.vdd.merge(ntap.layout.io().x);
         io.layout.vss.merge(ptap.layout.io().x);
 
