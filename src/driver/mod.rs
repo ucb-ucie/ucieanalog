@@ -170,15 +170,17 @@ impl<PDK: Pdk + Schema + Sized, T: DriverImpl<PDK> + Any> Tile<PDK> for DriverUn
                 },
             )
             .orient(Orientation::ReflectVert);
-        let mut nor_pu_data = cell.generate_connected(
-            T::mos(nor_pu_data_params),
-            MosIoSchematic {
-                d: nor_x,
-                g: io.schematic.din,
-                s: pd_en,
-                b: io.schematic.vdd,
-            },
-        );
+        let mut nor_pu_data = cell
+            .generate_connected(
+                T::mos(nor_pu_data_params),
+                MosIoSchematic {
+                    d: nor_x,
+                    g: io.schematic.din,
+                    s: pd_en,
+                    b: io.schematic.vdd,
+                },
+            )
+            .orient(Orientation::ReflectVert);
         let mut nor_pd_en = cell.generate_connected(
             T::mos(nor_pd_en_params),
             MosIoSchematic {
@@ -246,15 +248,17 @@ impl<PDK: Pdk + Schema + Sized, T: DriverImpl<PDK> + Any> Tile<PDK> for DriverUn
                 },
             )
             .orient(Orientation::ReflectVert);
-        let mut nand_pu_data = cell.generate_connected(
-            T::mos(nand_pu_data_params),
-            MosIoSchematic {
-                d: pu_en,
-                g: io.schematic.din,
-                s: io.schematic.vdd,
-                b: io.schematic.vdd,
-            },
-        );
+        let mut nand_pu_data = cell
+            .generate_connected(
+                T::mos(nand_pu_data_params),
+                MosIoSchematic {
+                    d: pu_en,
+                    g: io.schematic.din,
+                    s: io.schematic.vdd,
+                    b: io.schematic.vdd,
+                },
+            )
+            .orient(Orientation::ReflectVert);
         let mut nand_pd_en = cell.generate_connected(
             T::mos(nand_pd_en_params),
             MosIoSchematic {
