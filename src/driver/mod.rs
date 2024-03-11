@@ -134,12 +134,12 @@ impl<T: Any> Block for HorizontalDriverUnit<T> {
     type Io = DriverUnitIo;
 
     fn id() -> ArcStr {
-        substrate::arcstr::literal!("driver_unit")
+        substrate::arcstr::literal!("horizontal_driver_unit")
     }
 
     // todo: include parameters in name
     fn name(&self) -> ArcStr {
-        substrate::arcstr::literal!("driver_unit")
+        substrate::arcstr::literal!("horizontal_driver_unit")
     }
 
     fn io(&self) -> Self::Io {
@@ -407,12 +407,12 @@ impl<T: Any> Block for VerticalDriverUnit<T> {
     type Io = DriverUnitIo;
 
     fn id() -> ArcStr {
-        substrate::arcstr::literal!("driver_unit")
+        substrate::arcstr::literal!("vertical_driver_unit")
     }
 
     // todo: include parameters in name
     fn name(&self) -> ArcStr {
-        substrate::arcstr::literal!("driver_unit")
+        substrate::arcstr::literal!("vertical_driver_unit")
     }
 
     fn io(&self) -> Self::Io {
