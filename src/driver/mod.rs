@@ -328,21 +328,21 @@ impl<PDK: Pdk + Schema + Sized, T: DriverImpl<PDK> + Any> Tile<PDK> for DriverUn
 
         let nor_pd_en = cell.draw(nor_pd_en)?;
         let nor_pd_data = cell.draw(nor_pd_data)?;
-        let nor_pu_en = cell.draw(nor_pu_en)?;
-        let nor_pu_data = cell.draw(nor_pu_data)?;
-        let driver_pd = cell.draw(driver_pd)?;
-        let pd_res = cell.draw(pd_res)?;
+        let _nor_pu_en = cell.draw(nor_pu_en)?;
+        let _nor_pu_data = cell.draw(nor_pu_data)?;
+        let _driver_pd = cell.draw(driver_pd)?;
+        let _pd_res = cell.draw(pd_res)?;
         let pu_res = cell.draw(pu_res)?;
-        let driver_pu = cell.draw(driver_pu)?;
+        let _driver_pu = cell.draw(driver_pu)?;
         let nand_pd_en = cell.draw(nand_pd_en)?;
-        let nand_pd_data = cell.draw(nand_pd_data)?;
-        let nand_pu_en = cell.draw(nand_pu_en)?;
-        let nand_pu_data = cell.draw(nand_pu_data)?;
+        let _nand_pd_data = cell.draw(nand_pd_data)?;
+        let _nand_pu_en = cell.draw(nand_pu_en)?;
+        let _nand_pu_data = cell.draw(nand_pu_data)?;
 
-        let ntap_bot = cell.draw(ntap_bot)?;
+        let _ntap_bot = cell.draw(ntap_bot)?;
         let ptap = cell.draw(ptap)?;
         let ntap = cell.draw(ntap)?;
-        let ptap_top = cell.draw(ptap_top)?;
+        let _ptap_top = cell.draw(ptap_top)?;
 
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
