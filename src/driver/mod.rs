@@ -13,9 +13,13 @@ use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
 use substrate::geometry::align::AlignMode;
+use substrate::geometry::rect::Rect;
 use substrate::io::{InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
+use substrate::layout::bbox::LayerBbox;
+use substrate::layout::element::Shape;
 use substrate::layout::ExportsLayoutData;
-use substrate::pdk::Pdk;
+use substrate::pdk::layers::LayerId;
+use substrate::pdk::{Pdk, PdkLayers};
 use substrate::schematic::schema::Schema;
 use substrate::schematic::ExportsNestedData;
 
@@ -109,6 +113,12 @@ pub trait VerticalDriverImpl<PDK: Pdk + Schema> {
     fn resistor(params: ResistorTileParams) -> Self::ResistorTile;
     /// Creates a PDK-specific via maker.
     fn via_maker() -> Self::ViaMaker;
+    /// Returns the n-well layer ID.
+    fn nwell_id(layers: &PdkLayers<PDK>) -> LayerId;
+    /// Transforms the given n-well rectangle to be DRC clean.
+    fn nwell_transform(rect: Rect) -> Rect {
+        rect
+    }
     /// Additional layout hooks to run after the inverter layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
@@ -617,20 +627,44 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
         let nor_pd_en = cell.draw(nor_pd_en)?;
         let nor_pd_data = cell.draw(nor_pd_data)?;
         let _nor_pu_en = cell.draw(nor_pu_en)?;
-        let _nor_pu_data = cell.draw(nor_pu_data)?;
+        let nor_pu_data = cell.draw(nor_pu_data)?;
         let _driver_pd = cell.draw(driver_pd)?;
-        let _pd_res = cell.draw(pd_res)?;
+        let pd_res = cell.draw(pd_res)?;
         let pu_res = cell.draw(pu_res)?;
         let _driver_pu = cell.draw(driver_pu)?;
         let nand_pd_en = cell.draw(nand_pd_en)?;
         let _nand_pd_data = cell.draw(nand_pd_data)?;
         let _nand_pu_en = cell.draw(nand_pu_en)?;
-        let _nand_pu_data = cell.draw(nand_pu_data)?;
+        let nand_pu_data = cell.draw(nand_pu_data)?;
 
-        let _ntap_bot = cell.draw(ntap_bot)?;
+        let ntap_bot = cell.draw(ntap_bot)?;
         let ptap = cell.draw(ptap)?;
         let ntap = cell.draw(ntap)?;
         let _ptap_top = cell.draw(ptap_top)?;
+
+        let nwell = T::nwell_id(&cell.ctx().layers);
+
+        cell.layout.draw(Shape::new(
+            nwell,
+            T::nwell_transform(
+                ntap_bot
+                    .layout
+                    .layer_bbox(nwell)
+                    .unwrap()
+                    .union(nor_pu_data.layout.layer_bbox(nwell).unwrap()),
+            ),
+        ))?;
+
+        cell.layout.draw(Shape::new(
+            nwell,
+            T::nwell_transform(
+                pd_res
+                    .layout
+                    .layer_bbox(nwell)
+                    .unwrap()
+                    .union(nand_pu_data.layout.layer_bbox(nwell).unwrap()),
+            ),
+        ))?;
 
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
