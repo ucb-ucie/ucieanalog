@@ -13,11 +13,14 @@ use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
 use substrate::geometry::align::AlignMode;
+use substrate::geometry::bbox::Bbox;
+use substrate::geometry::dir::Dir;
 use substrate::geometry::rect::Rect;
 use substrate::io::{Array, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::bbox::LayerBbox;
 use substrate::layout::element::Shape;
 use substrate::layout::ExportsLayoutData;
+use substrate::pdk::layers::HasPin;
 use substrate::pdk::layers::{Layer, LayerId};
 use substrate::pdk::{Pdk, PdkLayers};
 use substrate::schematic::schema::Schema;
@@ -540,14 +543,16 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
                 b: io.schematic.vss,
             },
         );
-        let mut pd_res = cell.generate_connected(
-            T::resistor(pd_res_params),
-            ResistorIoSchematic {
-                p: io.schematic.dout,
-                n: pd_x,
-                b: io.schematic.vdd,
-            },
-        );
+        let mut pd_res = cell
+            .generate_connected(
+                T::resistor(pd_res_params),
+                ResistorIoSchematic {
+                    p: io.schematic.dout,
+                    n: pd_x,
+                    b: io.schematic.vdd,
+                },
+            )
+            .orient(Orientation::ReflectHoriz);
         let mut pu_res = cell.generate_connected(
             T::resistor(pu_res_params),
             ResistorIoSchematic {
@@ -666,7 +671,16 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
         let ntap_bot = cell.draw(ntap_bot)?;
         let ptap = cell.draw(ptap)?;
         let ntap = cell.draw(ntap)?;
-        let _ptap_top = cell.draw(ptap_top)?;
+        let ptap_top = cell.draw(ptap_top)?;
+
+        for tap in [&ntap_bot, &ptap, &ntap, &ptap_top] {
+            for shape in tap.layout.io().x.shapes() {
+                cell.layout.draw(Shape::new(
+                    shape.layer().drawing(),
+                    shape.bbox_rect().expand_dir(Dir::Vert, 136),
+                ))?;
+            }
+        }
 
         let nwell = T::nwell_id(&cell.ctx().layers);
 
@@ -794,9 +808,9 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for 
             io.layout.vss.merge(unit.layout.io().vss);
         }
 
-        cell.set_top_layer(2);
-        cell.set_router(GreedyRouter);
-        cell.set_via_maker(T::via_maker());
+        // cell.set_top_layer(2);
+        // cell.set_router(GreedyRouter);
+        // cell.set_via_maker(T::via_maker());
 
         T::post_layout_hooks(cell)?;
 
