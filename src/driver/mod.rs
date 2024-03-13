@@ -14,11 +14,11 @@ use substrate::block::Block;
 use substrate::error::Result;
 use substrate::geometry::align::AlignMode;
 use substrate::geometry::rect::Rect;
-use substrate::io::{InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
+use substrate::io::{Array, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::bbox::LayerBbox;
 use substrate::layout::element::Shape;
 use substrate::layout::ExportsLayoutData;
-use substrate::pdk::layers::LayerId;
+use substrate::pdk::layers::{Layer, LayerId};
 use substrate::pdk::{Pdk, PdkLayers};
 use substrate::schematic::schema::Schema;
 use substrate::schematic::ExportsNestedData;
@@ -67,6 +67,32 @@ pub struct DriverUnitParams {
     pub nand_pd_en_w: i64,
     /// The width of the data pull-down transistor of the NAND gate.
     pub nand_pd_data_w: i64,
+}
+
+/// The interface to a driver.
+#[derive(Debug, Clone, Io)]
+pub struct DriverIo {
+    /// The buffer input.
+    pub din: Input<Signal>,
+    /// The buffered output.
+    pub dout: Output<Signal>,
+    /// The pull-up control.
+    pub pu_ctl: Array<Input<Signal>>,
+    /// The pull-down control.
+    pub pd_ctl: Array<Input<Signal>>,
+    /// The VDD rail.
+    pub vdd: InOut<Signal>,
+    /// The VSS rail.
+    pub vss: InOut<Signal>,
+}
+
+/// The parameters of the [`HorizontalDriver`] and [`VerticalDriver`] layout generators.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct DriverParams {
+    /// Parameters of the driver unit.
+    pub unit: DriverUnitParams,
+    /// Number of segments.
+    pub num_segments: usize,
 }
 
 /// A horizontal driver implementation.
@@ -665,7 +691,6 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
                     .union(nand_pu_data.layout.layer_bbox(nwell).unwrap()),
             ),
         ))?;
-
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
@@ -676,6 +701,115 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
         io.layout.pd_ctl.merge(nand_pd_en.layout.io().g);
         io.layout.vdd.merge(ntap.layout.io().x);
         io.layout.vss.merge(ptap.layout.io().x);
+
+        T::post_layout_hooks(cell)?;
+
+        Ok(((), ()))
+    }
+}
+
+/// A vertical driver.
+#[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
+pub struct VerticalDriver<T>(
+    DriverParams,
+    #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
+);
+
+impl<T> VerticalDriver<T> {
+    /// Creates a new [`VerticalDriver`].
+    pub fn new(params: DriverParams) -> Self {
+        Self(params, PhantomData)
+    }
+}
+
+impl<T: Any> Block for VerticalDriver<T> {
+    type Io = DriverIo;
+
+    fn id() -> ArcStr {
+        substrate::arcstr::literal!("vertical_driver")
+    }
+
+    // todo: include parameters in name
+    fn name(&self) -> ArcStr {
+        substrate::arcstr::literal!("vertical_driver")
+    }
+
+    fn io(&self) -> Self::Io {
+        DriverIo {
+            din: Default::default(),
+            dout: Default::default(),
+            pu_ctl: Array::new(self.0.num_segments, Default::default()),
+            pd_ctl: Array::new(self.0.num_segments, Default::default()),
+            vdd: Default::default(),
+            vss: Default::default(),
+        }
+    }
+}
+
+impl<T: Any> ExportsNestedData for VerticalDriver<T> {
+    type NestedData = ();
+}
+
+impl<T: Any> ExportsLayoutData for VerticalDriver<T> {
+    type LayoutData = ();
+}
+
+impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for VerticalDriver<T> {
+    fn tile<'a>(
+        &self,
+        io: IoBuilder<'a, Self>,
+        cell: &mut TileBuilder<'a, PDK>,
+    ) -> substrate::error::Result<(
+        <Self as ExportsNestedData>::NestedData,
+        <Self as ExportsLayoutData>::LayoutData,
+    )> {
+        let mut units = Vec::new();
+        for i in 0..self.0.num_segments {
+            let mut unit = cell.generate_connected(
+                VerticalDriverUnit::<T>::new(self.0.unit),
+                DriverUnitIoSchematic {
+                    din: io.schematic.din,
+                    dout: io.schematic.dout,
+                    pu_ctl: io.schematic.pu_ctl[i],
+                    pd_ctl: io.schematic.pd_ctl[i],
+                    vdd: io.schematic.vdd,
+                    vss: io.schematic.vss,
+                },
+            );
+            if let Some(prev) = units.last() {
+                unit.align_mut(prev, AlignMode::Beneath, 0);
+                unit.align_mut(prev, AlignMode::Left, 0);
+            }
+            units.push(unit);
+        }
+
+        let units = units
+            .into_iter()
+            .enumerate()
+            .map(|(i, unit)| {
+                let unit = cell.draw(unit)?;
+                io.layout.din.merge(unit.layout.io().din);
+                io.layout.dout.merge(unit.layout.io().dout);
+                io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
+                io.layout.pd_ctl[i].merge(unit.layout.io().pd_ctl);
+                io.layout.vdd.merge(unit.layout.io().vdd);
+                io.layout.vss.merge(unit.layout.io().vss);
+
+                let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
+
+                let nwell = T::nwell_id(&cell.ctx().layers);
+                cell.layout.draw(Shape::new(
+                    nwell,
+                    unit.layout.layer_bbox(virtual_layers.outline.id()).unwrap(),
+                ))?;
+                Ok(unit)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        cell.set_top_layer(2);
+        cell.set_router(GreedyRouter);
+        cell.set_via_maker(T::via_maker());
 
         T::post_layout_hooks(cell)?;
 
