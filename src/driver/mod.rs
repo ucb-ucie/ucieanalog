@@ -784,28 +784,15 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for 
             units.push(unit);
         }
 
-        let units = units
-            .into_iter()
-            .enumerate()
-            .map(|(i, unit)| {
-                let unit = cell.draw(unit)?;
-                io.layout.din.merge(unit.layout.io().din);
-                io.layout.dout.merge(unit.layout.io().dout);
-                io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
-                io.layout.pd_ctl[i].merge(unit.layout.io().pd_ctl);
-                io.layout.vdd.merge(unit.layout.io().vdd);
-                io.layout.vss.merge(unit.layout.io().vss);
-
-                let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
-
-                let nwell = T::nwell_id(&cell.ctx().layers);
-                cell.layout.draw(Shape::new(
-                    nwell,
-                    unit.layout.layer_bbox(virtual_layers.outline.id()).unwrap(),
-                ))?;
-                Ok(unit)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        for (i, unit) in units.into_iter().enumerate() {
+            let unit = cell.draw(unit)?;
+            io.layout.din.merge(unit.layout.io().din);
+            io.layout.dout.merge(unit.layout.io().dout);
+            io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
+            io.layout.pd_ctl[i].merge(unit.layout.io().pd_ctl);
+            io.layout.vdd.merge(unit.layout.io().vdd);
+            io.layout.vss.merge(unit.layout.io().vss);
+        }
 
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
