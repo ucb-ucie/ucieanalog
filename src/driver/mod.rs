@@ -19,6 +19,7 @@ use substrate::geometry::rect::Rect;
 use substrate::io::{Array, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::bbox::LayerBbox;
 use substrate::layout::element::Shape;
+use substrate::layout::tracks::RoundingMode;
 use substrate::layout::ExportsLayoutData;
 use substrate::pdk::layers::HasPin;
 use substrate::pdk::layers::{Layer, LayerId};
@@ -147,6 +148,27 @@ pub trait VerticalDriverImpl<PDK: Pdk + Schema> {
     /// Transforms the given n-well rectangle to be DRC clean.
     fn nwell_transform(rect: Rect) -> Rect {
         rect
+    }
+    /// Defines the layer 2 track numbers that correspond to the DIN bus.
+    fn define_din_bus(cell: &mut TileBuilder<'_, PDK>) -> Vec<i64> {
+        let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
+        let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
+        vec![cell.layer_stack.layers[2]
+            .inner
+            .tracks()
+            .to_track_idx(bbox.center().x, RoundingMode::Down)]
+    }
+    /// Defines the layer 2 track numbers that correspond to the DOUT bus.
+    fn define_dout_bus(cell: &mut TileBuilder<'_, PDK>) -> Vec<i64> {
+        let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
+        let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
+        vec![
+            cell.layer_stack.layers[2]
+                .inner
+                .tracks()
+                .to_track_idx(bbox.center().x, RoundingMode::Down)
+                + 1,
+        ]
     }
     /// Additional layout hooks to run after the inverter layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
@@ -705,6 +727,47 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
                     .union(nand_pu_data.layout.layer_bbox(nwell).unwrap()),
             ),
         ))?;
+
+        let din_tracks = T::define_din_bus(cell);
+        let dout_tracks = T::define_dout_bus(cell);
+
+        let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
+        let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
+
+        for (i, (track, is_din)) in din_tracks
+            .into_iter()
+            .map(|track| (track, true))
+            .chain(dout_tracks.into_iter().map(|track| (track, false)))
+            .enumerate()
+        {
+            let x = cell.signal(
+                format!("{}_track_{i}", if is_din { "din" } else { "dout" }),
+                Signal::new(),
+            );
+            cell.connect(
+                if is_din {
+                    io.schematic.din
+                } else {
+                    io.schematic.dout
+                },
+                x,
+            );
+            let track_rect = Rect::from_spans(
+                cell.layer_stack.layers[2].inner.tracks().get(track),
+                bbox.vspan(),
+            );
+            cell.layout
+                .draw(Shape::new(cell.layer_stack.layers[2].id, track_rect))?;
+            cell.assign_grid_points(
+                x,
+                2,
+                cell.layer_stack
+                    .slice(0..3)
+                    .shrink_to_lcm_units(track_rect)
+                    .unwrap(),
+            );
+        }
+
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
