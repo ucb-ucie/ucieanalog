@@ -4,6 +4,8 @@ use crate::tiles::{
     MosTileParams, ResistorIo, ResistorIoSchematic, ResistorTileParams, TapIo, TapTileParams,
     TileKind,
 };
+use atoll::abs::TrackCoord;
+use atoll::grid::AtollLayer;
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
@@ -16,6 +18,9 @@ use substrate::geometry::align::AlignMode;
 use substrate::geometry::bbox::Bbox;
 use substrate::geometry::dir::Dir;
 use substrate::geometry::rect::Rect;
+use substrate::geometry::span::Span;
+use substrate::geometry::transform::Translate;
+use substrate::io::layout::IoShape;
 use substrate::io::{Array, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::bbox::LayerBbox;
 use substrate::layout::element::Shape;
@@ -134,6 +139,8 @@ pub trait VerticalDriverImpl<PDK: Pdk + Schema> {
     type ResistorTile: Tile<PDK> + Block<Io = ResistorIo> + Clone;
     /// A PDK-specific via maker.
     type ViaMaker: ViaMaker<PDK>;
+    /// The `din`/`dout` pin layer for driver unit cells.
+    type Pin: HasPin;
 
     /// Creates an instance of the MOS tile.
     fn mos(params: MosTileParams) -> Self::MosTile;
@@ -149,27 +156,8 @@ pub trait VerticalDriverImpl<PDK: Pdk + Schema> {
     fn nwell_transform(rect: Rect) -> Rect {
         rect
     }
-    /// Defines the layer 2 track numbers that correspond to the DIN bus.
-    fn define_din_bus(cell: &mut TileBuilder<'_, PDK>) -> Vec<i64> {
-        let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
-        let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
-        vec![cell.layer_stack.layers[2]
-            .inner
-            .tracks()
-            .to_track_idx(bbox.center().x, RoundingMode::Down)]
-    }
-    /// Defines the layer 2 track numbers that correspond to the DOUT bus.
-    fn define_dout_bus(cell: &mut TileBuilder<'_, PDK>) -> Vec<i64> {
-        let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
-        let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
-        vec![
-            cell.layer_stack.layers[2]
-                .inner
-                .tracks()
-                .to_track_idx(bbox.center().x, RoundingMode::Down)
-                + 1,
-        ]
-    }
+    /// Returns the `din`/`dout` pin layer.
+    fn pin(layers: &PdkLayers<PDK>) -> Self::Pin;
     /// Additional layout hooks to run after the inverter layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
@@ -728,52 +716,72 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
             ),
         ))?;
 
-        let din_tracks = T::define_din_bus(cell);
-        let dout_tracks = T::define_dout_bus(cell);
-
         let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
         let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
 
-        for (i, (track, is_din)) in din_tracks
-            .into_iter()
-            .map(|track| (track, true))
-            .chain(dout_tracks.into_iter().map(|track| (track, false)))
-            .enumerate()
-        {
-            let x = cell.signal(
-                format!("{}_track_{i}", if is_din { "din" } else { "dout" }),
-                Signal::new(),
-            );
-            cell.connect(
-                if is_din {
-                    io.schematic.din
-                } else {
-                    io.schematic.dout
-                },
-                x,
-            );
-            let track_rect = Rect::from_spans(
-                cell.layer_stack.layers[2].inner.tracks().get(track),
-                bbox.vspan(),
-            );
-            cell.layout
-                .draw(Shape::new(cell.layer_stack.layers[2].id, track_rect))?;
+        let layer2 = cell.layer_stack.layers[2].clone();
+        // Route `din` along edges of driver.
+        let min_track = layer2
+            .inner
+            .tracks()
+            .to_track_idx(bbox.left() + layer2.pitch() + 1, RoundingMode::Up);
+        let max_track = layer2
+            .inner
+            .tracks()
+            .to_track_idx(bbox.right() - layer2.pitch() - 1, RoundingMode::Down);
+        for track in [min_track, max_track] {
+            let track_rect = Rect::from_spans(layer2.inner.tracks().get(track), bbox.vspan());
+            cell.layout.draw(Shape::new(layer2.id, track_rect))?;
             cell.assign_grid_points(
-                x,
+                io.schematic.din,
                 2,
                 cell.layer_stack
                     .slice(0..3)
                     .shrink_to_lcm_units(track_rect)
                     .unwrap(),
             );
+            io.layout
+                .din
+                .push(IoShape::with_layers(T::pin(&cell.ctx().layers), track_rect));
         }
+
+        // Route `dout` to center track.
+        let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
+        let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
+        let center_track_x = layer2
+            .inner
+            .tracks()
+            .to_track_idx(bbox.center().x, RoundingMode::Nearest);
+        let center_track_y = cell.layer_stack.layers[1]
+            .inner
+            .tracks()
+            .to_track_idx(bbox.center().y, RoundingMode::Nearest);
+
+        let track_rect = Rect::from_spans(
+            layer2.inner.tracks().get(center_track_x),
+            cell.layer_stack.layers[1]
+                .inner
+                .tracks()
+                .get(center_track_y),
+        );
+
+        cell.assign_grid_points(
+            io.schematic.dout,
+            2,
+            cell.layer_stack
+                .slice(0..3)
+                .shrink_to_lcm_units(track_rect)
+                .unwrap(),
+        );
+        cell.layout.draw(Shape::new(layer2.id, track_rect))?;
+        io.layout
+            .dout
+            .push(IoShape::with_layers(T::pin(&cell.ctx().layers), track_rect));
 
         cell.set_top_layer(2);
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
 
-        io.layout.din.merge(nor_pd_data.layout.io().g);
-        io.layout.dout.merge(pu_res.layout.io().p);
         io.layout.pu_ctl.merge(nor_pd_en.layout.io().g);
         io.layout.pd_ctl.merge(nand_pd_en.layout.io().g);
         io.layout.vdd.merge(ntap.layout.io().x);
@@ -861,17 +869,70 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for 
             units.push(unit);
         }
 
-        for (i, unit) in units.into_iter().enumerate() {
-            let unit = cell.draw(unit)?;
-            io.layout.din.merge(unit.layout.io().din);
-            io.layout.dout.merge(unit.layout.io().dout);
-            io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
-            io.layout.pd_ctl[i].merge(unit.layout.io().pd_ctl);
-            io.layout.vdd.merge(unit.layout.io().vdd);
-            io.layout.vss.merge(unit.layout.io().vss);
+        let units = units
+            .into_iter()
+            .enumerate()
+            .map(|(i, unit)| {
+                let unit = cell.draw(unit)?;
+                io.layout.din.merge(unit.layout.io().din);
+                io.layout.dout.merge(unit.layout.io().dout);
+                io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
+                io.layout.pd_ctl[i].merge(unit.layout.io().pd_ctl);
+                io.layout.vdd.merge(unit.layout.io().vdd);
+                io.layout.vss.merge(unit.layout.io().vss);
+                Ok(unit)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let layer3 = &cell.layer_stack.layers[3];
+        let din_connect_track = layer3.inner.tracks().to_track_idx(
+            units[0].layout.io().din.bbox_rect().top(),
+            RoundingMode::Nearest,
+        );
+        let din_pin = Rect::from_spans(
+            units[0].layout.io().din.bbox_rect().hspan(),
+            layer3.inner.tracks().get(din_connect_track),
+        );
+        cell.layout.draw(Shape::new(layer3.id, din_pin))?;
+        let via_maker = T::via_maker();
+        for shape in units[0].layout.io().din.shapes() {
+            let x_track = cell.layer_stack.layers[2]
+                .inner
+                .tracks()
+                .to_track_idx(shape.bbox_rect().center().x, RoundingMode::Nearest);
+            for shape in via_maker.draw_via(
+                cell.ctx().clone(),
+                TrackCoord {
+                    layer: 3,
+                    x: x_track,
+                    y: din_connect_track,
+                },
+            ) {
+                cell.layout.draw(shape)?;
+            }
         }
 
-        // cell.set_top_layer(2);
+        let gmz_rect = Rect::from_spans(
+            Span::from_center_span(units[0].layout.io().dout.bbox_rect().center().x, 1080),
+            cell.layout.bbox_rect().vspan(),
+        );
+        cell.layout
+            .draw(Shape::new(cell.layer_stack.layers[8].id, gmz_rect))?;
+
+        let mut via_stack = Vec::new();
+        for layer in 3..9 {
+            via_stack
+                .extend(via_maker.draw_via(cell.ctx().clone(), TrackCoord { layer, x: 0, y: 0 }))
+        }
+        for i in 0..self.0.num_segments {
+            for shape in &via_stack {
+                cell.layout.draw(shape.clone().translate(
+                    units[i].layout.io().dout.bbox_rect().center() - shape.bbox_rect().center(),
+                ))?;
+            }
+        }
+
+        cell.set_top_layer(4);
         // cell.set_router(GreedyRouter);
         // cell.set_via_maker(T::via_maker());
 
