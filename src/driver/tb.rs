@@ -183,7 +183,9 @@ where
 /// The resulting waveforms of a [`DriverAcTb`].
 #[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
 pub struct DriverAcSim {
+    /// The simulation frequency.
     pub freq: ac::Freq,
+    /// The output voltage.
     pub vout: ac::Voltage,
 }
 
