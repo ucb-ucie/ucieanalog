@@ -1,6 +1,6 @@
 //! Driver layout generators.
 
-mod tb;
+pub mod tb;
 
 use crate::tiles::{
     MosTileParams, ResistorIo, ResistorIoSchematic, ResistorTileParams, TapIo, TapTileParams,
@@ -38,6 +38,7 @@ pub struct DriverUnitIo {
     pub vss: InOut<Signal>,
 }
 
+/// The interface of the segmented driver.
 #[derive(Debug, Clone, Io)]
 pub struct DriverIo {
     /// The buffer input.

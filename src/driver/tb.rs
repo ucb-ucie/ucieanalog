@@ -1,11 +1,13 @@
+//! Driver verification testbenches.
+
 use crate::driver::DriverIo;
-use approx::abs_diff_eq;
+
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use spectre::analysis::ac::{Ac, Sweep};
-use spectre::blocks::{AcSource, Isource, Pulse, Vsource};
+use spectre::blocks::{AcSource, Isource, Vsource};
 use spectre::{ErrPreset, Spectre};
 use std::any::Any;
 use std::fmt::Debug;
@@ -14,13 +16,13 @@ use std::marker::PhantomData;
 use substrate::arcstr;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
-use substrate::io::schematic::{Bundle, HardwareType, Node};
-use substrate::io::{Array, DiffPair, FlatLen, Signal, TestbenchIo, TwoTerminalIoSchematic};
+use substrate::io::schematic::{HardwareType, Node};
+use substrate::io::{Array, FlatLen, Signal, TestbenchIo, TwoTerminalIoSchematic};
 use substrate::pdk::corner::Pvt;
 use substrate::schematic::schema::Schema;
 use substrate::schematic::{Cell, CellBuilder, ExportsNestedData, NestedData, Schematic};
 use substrate::scir::schema::FromSchema;
-use substrate::simulation::data::{ac, FromSaved, Save, SaveTb, SavedKey};
+use substrate::simulation::data::{ac, FromSaved, Save, SaveTb};
 use substrate::simulation::options::SimOption;
 use substrate::simulation::{SimController, SimulationContext, Simulator, Testbench};
 
