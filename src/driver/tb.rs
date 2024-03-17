@@ -183,8 +183,8 @@ where
 /// The resulting waveforms of a [`DriverAcTb`].
 #[derive(Debug, Clone, Serialize, Deserialize, FromSaved)]
 pub struct DriverAcSim {
-    freq: ac::Freq,
-    vout: ac::Voltage,
+    pub freq: ac::Freq,
+    pub vout: ac::Voltage,
 }
 
 impl<T, PDK, C> SaveTb<Spectre, Ac, DriverAcSim> for DriverAcTb<T, PDK, C>

@@ -51,7 +51,7 @@ pub struct DriverUnitIo {
     pub vss: InOut<Signal>,
 }
 
-/// The parameters of the [`DriverUnit`] layout generator.
+/// The parameters of a driver unit schematic/layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct DriverUnitParams {
     /// The width of the enable pull-up transistor of the NOR gate.
@@ -97,7 +97,7 @@ pub struct DriverIo {
     pub vss: InOut<Signal>,
 }
 
-/// The parameters of the [`HorizontalDriver`] and [`VerticalDriver`] layout generators.
+/// The parameters of the horizontal and vertical driver generators.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct DriverParams {
     /// Parameters of the driver unit.
