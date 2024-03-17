@@ -666,12 +666,12 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
         ntap_bot.align_mut(&nor_pu_en, AlignMode::Bottom, 0);
 
         let nor_pd_en = cell.draw(nor_pd_en)?;
-        let nor_pd_data = cell.draw(nor_pd_data)?;
+        let _nor_pd_data = cell.draw(nor_pd_data)?;
         let _nor_pu_en = cell.draw(nor_pu_en)?;
         let nor_pu_data = cell.draw(nor_pu_data)?;
         let _driver_pd = cell.draw(driver_pd)?;
         let pd_res = cell.draw(pd_res)?;
-        let pu_res = cell.draw(pu_res)?;
+        let _pu_res = cell.draw(pu_res)?;
         let _driver_pu = cell.draw(driver_pu)?;
         let nand_pd_en = cell.draw(nand_pd_en)?;
         let _nand_pd_data = cell.draw(nand_pd_data)?;
@@ -924,10 +924,10 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for 
             via_stack
                 .extend(via_maker.draw_via(cell.ctx().clone(), TrackCoord { layer, x: 0, y: 0 }))
         }
-        for i in 0..self.0.num_segments {
+        for unit in units.iter() {
             for shape in &via_stack {
                 cell.layout.draw(shape.clone().translate(
-                    units[i].layout.io().dout.bbox_rect().center() - shape.bbox_rect().center(),
+                    unit.layout.io().dout.bbox_rect().center() - shape.bbox_rect().center(),
                 ))?;
             }
         }
