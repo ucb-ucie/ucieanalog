@@ -1552,6 +1552,7 @@ dependencies = [
  "autocfg",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -1561,6 +1562,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23c6602fda94a57c990fe0df199a035d83576b496aa29f4e634a8ac6004e68a6"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -1604,6 +1606,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -1990,12 +1993,13 @@ dependencies = [
 
 [[package]]
 name = "psfparser"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce3c3dcd9cd6b1aed035069d4b1961de1f0a4eff12d79c068da043654cce663"
+checksum = "aded49e0746579b54e939471e8b3f40e835cd1a954f257d9af130a31151d1e04"
 dependencies = [
  "anyhow",
  "float_eq",
+ "num",
  "pest",
  "pest_derive",
 ]
@@ -2441,7 +2445,9 @@ dependencies = [
  "cache",
  "itertools",
  "lazy_static",
+ "num",
  "psfparser",
+ "regex",
  "rust_decimal",
  "rust_decimal_macros",
  "scir",

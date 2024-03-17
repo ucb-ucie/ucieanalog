@@ -1,5 +1,7 @@
 //! Driver layout generators.
 
+mod tb;
+
 use crate::tiles::{
     MosTileParams, ResistorIo, ResistorIoSchematic, ResistorTileParams, TapIo, TapTileParams,
     TileKind,
@@ -13,7 +15,7 @@ use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
 use substrate::geometry::align::AlignMode;
-use substrate::io::{InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
+use substrate::io::{Array, InOut, Input, Io, MosIo, MosIoSchematic, Output, Signal};
 use substrate::layout::ExportsLayoutData;
 use substrate::pdk::Pdk;
 use substrate::schematic::schema::Schema;
@@ -30,6 +32,22 @@ pub struct DriverUnitIo {
     pub pu_ctl: Input<Signal>,
     /// The pull-down control.
     pub pd_ctl: Input<Signal>,
+    /// The VDD rail.
+    pub vdd: InOut<Signal>,
+    /// The VSS rail.
+    pub vss: InOut<Signal>,
+}
+
+#[derive(Debug, Clone, Io)]
+pub struct DriverIo {
+    /// The buffer input.
+    pub din: Input<Signal>,
+    /// The buffered output.
+    pub dout: Output<Signal>,
+    /// The pull-up control.
+    pub pu_ctl: Array<Input<Signal>>,
+    /// The pull-down control.
+    pub pd_ctl: Array<Input<Signal>>,
     /// The VDD rail.
     pub vdd: InOut<Signal>,
     /// The VSS rail.
