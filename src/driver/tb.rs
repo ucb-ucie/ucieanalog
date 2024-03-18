@@ -241,6 +241,7 @@ pub struct DriverSimParams<T, C> {
     pub sweep_points: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriverAcSims {
     /// Pull-up resistances.
     ///
