@@ -245,20 +245,23 @@ pub struct DriverAcSims {
     /// Pull-up resistances.
     ///
     /// Dimensions: code sweep size x vin sweep size x freq sweep length.
-    pub r_pu: Vec<Vec<f64>>,
+    pub r_pu: Vec<Vec<Vec<f64>>>,
     /// Pull-down resistances.
     ///
     /// Dimensions: code sweep size x vin sweep size x freq sweep length.
-    pub r_pd: Vec<Vec<f64>>,
+    pub r_pd: Vec<Vec<Vec<f64>>>,
     /// The frequency vector.
     pub freq: Vec<f64>,
+    /// The input voltage vector.
+    pub vin: Vec<Decimal>,
 }
 
 pub fn simulate_driver<T, PDK, C>(
     params: DriverSimParams<T, C>,
     ctx: PdkContext<PDK>,
     work_dir: impl AsRef<Path>,
-) where
+) -> DriverAcSims
+where
     DriverAcTb<T, PDK, C>: Testbench<Spectre, Output = DriverAcSim>,
     T: Clone,
     PDK: Schema + Pdk,
@@ -271,6 +274,11 @@ pub fn simulate_driver<T, PDK, C>(
 
     assert!(params.sweep_points >= 2);
 
+    let mut vin_swp_vec = Vec::new();
+    for i in 0..params.sweep_points {
+        let vin = params.pvt.voltage * Decimal::from(i) / Decimal::from(params.sweep_points - 1);
+        vin_swp_vec.push(vin);
+    }
     let mut handles = Vec::new();
     for (mask_bits, is_pu) in [(n_pu, true), (n_pd, false)] {
         for code in 1..=mask_bits {
@@ -281,8 +289,8 @@ pub fn simulate_driver<T, PDK, C>(
                 } else {
                     (vec![true; n_pu], var_mask, "pd")
                 };
-                let vin =
-                    params.pvt.voltage * Decimal::from(i) / Decimal::from(params.sweep_points - 1);
+                let vin = vin_swp_vec[i];
+                vin_swp_vec.push(vin);
                 let sim_dir = work_dir
                     .as_ref()
                     .join(format!("{name}_code{code}_vin{vin}"));
@@ -304,19 +312,38 @@ pub fn simulate_driver<T, PDK, C>(
                             sim_dir,
                         )
                         .expect("failed to run sim");
-                    sim.vout
-                        .iter()
-                        .map(|&z| 1.0 / ((1.0 / z).re))
-                        .collect::<Vec<_>>()
+                    (
+                        code,
+                        i,
+                        is_pu,
+                        sim.freq,
+                        sim.vout
+                            .iter()
+                            .map(|&z| 1.0 / ((1.0 / z).re))
+                            .collect::<Vec<_>>(),
+                    )
                 });
                 handles.push(handle);
             }
         }
     }
 
+    let mut out = DriverAcSims {
+        r_pu: vec![vec![vec![]; params.sweep_points]; n_pu],
+        r_pd: vec![vec![vec![]; params.sweep_points]; n_pd],
+        freq: vec![],
+        vin: vin_swp_vec,
+    };
+
     for h in handles {
-        h.join().expect("thread failed");
+        let (code, vin_idx, is_pu, freq, r) = h.join().expect("thread failed");
+        out.freq = (*freq).clone();
+        if is_pu {
+            out.r_pu[code][vin_idx] = r;
+        }
     }
+
+    out
 }
 
 /// Converts a code to thermometer coding.
