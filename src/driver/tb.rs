@@ -14,6 +14,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::path::Path;
+use std::thread;
 use substrate::arcstr;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
@@ -270,6 +271,7 @@ pub fn simulate_driver<T, PDK, C>(
 
     assert!(params.sweep_points >= 2);
 
+    let mut handles = Vec::new();
     for (mask_bits, is_pu) in [(n_pu, true), (n_pd, false)] {
         for code in 1..=mask_bits {
             for i in 0..params.sweep_points {
@@ -284,27 +286,34 @@ pub fn simulate_driver<T, PDK, C>(
                 let sim_dir = work_dir
                     .as_ref()
                     .join(format!("{name}_code{code}_vin{vin}"));
-                let sim = ctx
-                    .simulate(
-                        DriverAcTb::new(
-                            params.driver.clone(),
-                            params.fstart,
-                            params.fstop,
-                            vin,
-                            pu_mask,
-                            pd_mask,
-                            params.pvt.clone(),
-                        ),
-                        sim_dir,
-                    )
-                    .expect("failed to run sim");
-                let r = sim
-                    .vout
-                    .iter()
-                    .map(|&z| 1.0 / ((1.0 / z).re))
-                    .collect::<Vec<_>>();
+                let handle = thread::spawn(move || {
+                    let sim = ctx
+                        .simulate(
+                            DriverAcTb::new(
+                                params.driver.clone(),
+                                params.fstart,
+                                params.fstop,
+                                vin,
+                                pu_mask,
+                                pd_mask,
+                                params.pvt.clone(),
+                            ),
+                            sim_dir,
+                        )
+                        .expect("failed to run sim");
+                    sim
+                        .vout
+                        .iter()
+                        .map(|&z| 1.0 / ((1.0 / z).re))
+                        .collect::<Vec<_>>()
+                });
+                handles.push(handle);
             }
         }
+    }
+
+    for h in handles {
+        h.join().expect("thread failed");
     }
 }
 
