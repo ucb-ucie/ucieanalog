@@ -263,7 +263,7 @@ pub fn simulate_driver<T, PDK, C>(
     T: Clone,
     PDK: Schema + Pdk,
     T: Schematic<PDK> + Block<Io = DriverIo>,
-    C: Clone,
+    C: Clone + Send,
 {
     let x = ctx.generate_schematic(params.driver.clone());
     let n_pu = x.cell().io().pu_ctl.num_elems();
@@ -281,28 +281,30 @@ pub fn simulate_driver<T, PDK, C>(
                 } else {
                     (vec![true; n_pu], var_mask, "pd")
                 };
-                let vin = params.pvt.voltage * Decimal::from(i)
-                    / Decimal::from(params.sweep_points - 1);
+                let vin =
+                    params.pvt.voltage * Decimal::from(i) / Decimal::from(params.sweep_points - 1);
                 let sim_dir = work_dir
                     .as_ref()
                     .join(format!("{name}_code{code}_vin{vin}"));
+                let driver = params.driver.clone();
+                let pvt = params.pvt.clone();
+                let ctx = ctx.clone();
                 let handle = thread::spawn(move || {
                     let sim = ctx
                         .simulate(
                             DriverAcTb::new(
-                                params.driver.clone(),
+                                driver,
                                 params.fstart,
                                 params.fstop,
                                 vin,
                                 pu_mask,
                                 pd_mask,
-                                params.pvt.clone(),
+                                pvt,
                             ),
                             sim_dir,
                         )
                         .expect("failed to run sim");
-                    sim
-                        .vout
+                    sim.vout
                         .iter()
                         .map(|&z| 1.0 / ((1.0 / z).re))
                         .collect::<Vec<_>>()
