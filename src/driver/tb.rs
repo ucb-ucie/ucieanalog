@@ -341,6 +341,8 @@ where
         out.freq = (*freq).clone();
         if is_pu {
             out.r_pu[code - 1][vin_idx] = r;
+        } else {
+            out.r_pd[code - 1][vin_idx] = r;
         }
     }
 
