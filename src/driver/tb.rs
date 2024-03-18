@@ -255,6 +255,10 @@ pub struct DriverAcSims {
     pub freq: Vec<f64>,
     /// The input voltage vector.
     pub vin: Vec<Decimal>,
+    /// The pull-up code sweep vector.
+    pub pu_codes: Vec<usize>,
+    /// The pull-down code sweep vector.
+    pub pd_codes: Vec<usize>,
 }
 
 pub fn simulate_driver<T, PDK, C>(
@@ -274,6 +278,8 @@ where
     let n_pd = x.cell().io().pd_ctl.num_elems();
 
     assert!(params.sweep_points >= 2);
+    let pu_codes = (1..=n_pu).collect();
+    let pd_codes = (1..=n_pd).collect();
 
     let mut vin_swp_vec = Vec::new();
     for i in 0..params.sweep_points {
@@ -334,6 +340,8 @@ where
         r_pd: vec![vec![vec![]; params.sweep_points]; n_pd],
         freq: vec![],
         vin: vin_swp_vec,
+        pu_codes,
+        pd_codes,
     };
 
     for h in handles {
