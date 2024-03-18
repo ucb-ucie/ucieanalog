@@ -279,7 +279,8 @@ pub fn simulate_driver<T, PDK, C>(
                 } else {
                     (vec![true; n_pu], var_mask, "pd")
                 };
-                let vin = params.pvt.voltage / Decimal::from((params.sweep_points - 1) * i);
+                let vin = params.pvt.voltage * Decimal::from(i)
+                    / Decimal::from((params.sweep_points - 1));
                 let sim_dir = work_dir
                     .as_ref()
                     .join(format!("{name}_code{code}_vin{vin}"));
