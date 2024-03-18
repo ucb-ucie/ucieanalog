@@ -13,12 +13,15 @@ use std::any::Any;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::path::Path;
 use substrate::arcstr;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
+use substrate::context::PdkContext;
 use substrate::io::schematic::{HardwareType, Node};
 use substrate::io::{Array, FlatLen, Signal, TestbenchIo, TwoTerminalIoSchematic};
 use substrate::pdk::corner::Pvt;
+use substrate::pdk::Pdk;
 use substrate::schematic::schema::Schema;
 use substrate::schematic::{Cell, CellBuilder, ExportsNestedData, NestedData, Schematic};
 use substrate::scir::schema::FromSchema;
@@ -227,4 +230,100 @@ where
             .expect("failed to run simulation");
         wav
     }
+}
+
+pub struct DriverSimParams<T, C> {
+    driver: T,
+    pvt: Pvt<C>,
+    fstart: Decimal,
+    fstop: Decimal,
+    sweep_points: usize,
+}
+
+pub struct DriverAcSims {
+    /// Pull-up resistances.
+    ///
+    /// Dimensions: code sweep size x vin sweep size x freq sweep length.
+    pub r_pu: Vec<Vec<f64>>,
+    /// Pull-down resistances.
+    ///
+    /// Dimensions: code sweep size x vin sweep size x freq sweep length.
+    pub r_pd: Vec<Vec<f64>>,
+    /// The frequency vector.
+    pub freq: Vec<f64>,
+}
+
+fn simulate_driver<T, PDK, C>(
+    params: DriverSimParams<T, C>,
+    ctx: PdkContext<PDK>,
+    work_dir: impl AsRef<Path>,
+) where
+    DriverAcTb<T, PDK, C>: Testbench<Spectre, Output = DriverAcSim>,
+    T: Clone,
+    PDK: Schema + Pdk,
+    T: Schematic<PDK> + Block<Io = DriverIo>,
+    C: Clone,
+{
+    let x = ctx.generate_schematic(params.driver.clone());
+    let n_pu = x.cell().io().pu_ctl.num_elems();
+    let n_pd = x.cell().io().pd_ctl.num_elems();
+
+    assert!(params.sweep_points >= 2);
+
+    for (mask_bits, is_pu) in [(n_pu, true), (n_pd, false)] {
+        for code in 1..=mask_bits {
+            for i in 0..params.sweep_points {
+                let var_mask = code_to_thermometer(code, mask_bits);
+                let (pu_mask, pd_mask, name) = if is_pu {
+                    (var_mask, vec![true; n_pd], "pu")
+                } else {
+                    (vec![true; n_pu], var_mask, "pd")
+                };
+                let sim_dir = work_dir
+                    .as_ref()
+                    .join(format!("{name}_code{code}_vin{vin}"));
+                let vin = params.pvt.voltage / Decimal::from((params.sweep_points - 1) * i);
+                let sim = ctx
+                    .simulate(
+                        DriverAcTb::new(
+                            params.driver.clone(),
+                            params.fstart,
+                            params.fstop,
+                            vin,
+                            pu_mask,
+                            pd_mask,
+                            params.pvt.clone(),
+                        ),
+                        sim_dir,
+                    )
+                    .expect("failed to run sim");
+                let r = sim
+                    .vout
+                    .iter()
+                    .map(|&z| 1.0 / ((1.0 / z).re))
+                    .collect::<Vec<_>>();
+            }
+        }
+    }
+}
+
+/// Converts a code to thermometer coding.
+///
+/// Examples for bits=4:
+/// 0 becomes 0000
+/// 1 becomes 1000
+/// 2 becomes 1100
+/// 3 becomes 1110
+/// 4 becomes 1111
+fn code_to_thermometer(mut code: usize, bits: usize) -> Vec<bool> {
+    assert!(code <= bits);
+    let mut out = Vec::with_capacity(bits);
+    for _ in 0..code {
+        out.push(true);
+    }
+    for _ in 0..(bits - code) {
+        out.push(false);
+    }
+
+    out
 }
