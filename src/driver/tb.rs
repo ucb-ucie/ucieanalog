@@ -233,11 +233,11 @@ where
 }
 
 pub struct DriverSimParams<T, C> {
-    driver: T,
-    pvt: Pvt<C>,
-    fstart: Decimal,
-    fstop: Decimal,
-    sweep_points: usize,
+    pub driver: T,
+    pub pvt: Pvt<C>,
+    pub fstart: Decimal,
+    pub fstop: Decimal,
+    pub sweep_points: usize,
 }
 
 pub struct DriverAcSims {
@@ -253,7 +253,7 @@ pub struct DriverAcSims {
     pub freq: Vec<f64>,
 }
 
-fn simulate_driver<T, PDK, C>(
+pub fn simulate_driver<T, PDK, C>(
     params: DriverSimParams<T, C>,
     ctx: PdkContext<PDK>,
     work_dir: impl AsRef<Path>,
@@ -279,10 +279,10 @@ fn simulate_driver<T, PDK, C>(
                 } else {
                     (vec![true; n_pu], var_mask, "pd")
                 };
+                let vin = params.pvt.voltage / Decimal::from((params.sweep_points - 1) * i);
                 let sim_dir = work_dir
                     .as_ref()
                     .join(format!("{name}_code{code}_vin{vin}"));
-                let vin = params.pvt.voltage / Decimal::from((params.sweep_points - 1) * i);
                 let sim = ctx
                     .simulate(
                         DriverAcTb::new(
