@@ -340,7 +340,7 @@ where
         let (code, vin_idx, is_pu, freq, r) = h.join().expect("thread failed");
         out.freq = (*freq).clone();
         if is_pu {
-            out.r_pu[code][vin_idx] = r;
+            out.r_pu[code - 1][vin_idx] = r;
         }
     }
 
