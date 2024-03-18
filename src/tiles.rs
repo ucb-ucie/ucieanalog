@@ -75,3 +75,12 @@ impl ResistorTileParams {
         Self { l }
     }
 }
+
+/// Resistor connection configurations.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum ResistorConn {
+    /// Series.
+    Series,
+    /// Parallel.
+    Parallel,
+}

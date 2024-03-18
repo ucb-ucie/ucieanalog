@@ -3,8 +3,8 @@
 pub mod tb;
 
 use crate::tiles::{
-    MosTileParams, ResistorIo, ResistorIoSchematic, ResistorTileParams, TapIo, TapTileParams,
-    TileKind,
+    MosTileParams, ResistorConn, ResistorIo, ResistorIoSchematic, ResistorTileParams, TapIo,
+    TapTileParams, TileKind,
 };
 use atoll::abs::TrackCoord;
 use atoll::grid::AtollLayer;
@@ -64,10 +64,18 @@ pub struct DriverUnitParams {
     pub nor_pd_data_w: i64,
     /// Half of the width of the driver pull-down transistor.
     pub driver_pd_w: i64,
+    /// The number of legs of the resistors.
+    pub res_legs: i64,
+    /// The width of the resistors.
+    pub res_w: i64,
     /// The length of the pull-down resistor.
     pub pd_res_l: i64,
+    /// The connection type of the pull-down resistor.
+    pub pd_res_conn: ResistorConn,
     /// The length of the pull-up resistor.
     pub pu_res_l: i64,
+    /// The connection type of the pull-up resistor.
+    pub pu_res_conn: ResistorConn,
     /// Half of the width of the driver pull-up transistor.
     pub driver_pu_w: i64,
     /// The width of the enable pull-up transistor of the NAND gate.
@@ -118,11 +126,15 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     type ViaMaker: ViaMaker<PDK>;
 
     /// Creates an instance of the MOS tile.
-    fn mos(params: MosTileParams) -> Self::MosTile;
+    fn mos(kind: TileKind, nf: i64, w: i64) -> Self::MosTile;
     /// Creates an instance of the tap tile.
-    fn tap(params: TapTileParams) -> Self::TapTile;
+    fn tap(kind: TileKind, nf: i64) -> Self::TapTile;
+    /// The number of fingers needed for the MOS tile to match the width of the resistor tile.
+    ///
+    /// Must return an even number of fingers.
+    fn nf(legs: i64, w: i64) -> i64;
     /// Creates an instance of the resistor tile.
-    fn resistor(params: ResistorTileParams) -> Self::ResistorTile;
+    fn resistor(legs: i64, w: i64, l: i64, conn: ResistorConn) -> Self::ResistorTile;
     /// Creates a PDK-specific via maker.
     fn via_maker() -> Self::ViaMaker;
     /// Additional layout hooks to run after the inverter layout is complete.
@@ -217,18 +229,8 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
-        let nor_pu_en_params = MosTileParams::new(TileKind::P, self.0.nor_pu_en_w);
-        let nor_pu_data_params = MosTileParams::new(TileKind::P, self.0.nor_pu_data_w);
-        let nor_pd_en_params = MosTileParams::new(TileKind::N, self.0.nor_pd_en_w);
-        let nor_pd_data_params = MosTileParams::new(TileKind::N, self.0.nor_pd_data_w);
-        let driver_pd_params = MosTileParams::new(TileKind::N, self.0.driver_pd_w);
-        let pd_res_params = ResistorTileParams::new(self.0.pd_res_l);
-        let pu_res_params = ResistorTileParams::new(self.0.pu_res_l);
-        let driver_pu_params = MosTileParams::new(TileKind::P, self.0.driver_pu_w);
-        let nand_pu_en_params = MosTileParams::new(TileKind::P, self.0.nand_pu_en_w);
-        let nand_pu_data_params = MosTileParams::new(TileKind::P, self.0.nand_pu_data_w);
-        let nand_pd_en_params = MosTileParams::new(TileKind::N, self.0.nand_pd_en_w);
-        let nand_pd_data_params = MosTileParams::new(TileKind::N, self.0.nand_pd_data_w);
+        let nf = T::nf(self.0.res_legs, self.0.res_w);
+        assert_eq!(nf % 2, 0);
 
         let nor_x = cell.signal("nor_x", Signal::new());
         let nand_x = cell.signal("nand_x", Signal::new());
@@ -237,9 +239,11 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let pd_x = cell.signal("pd_x", Signal::new());
         let pu_x = cell.signal("pu_x", Signal::new());
 
+        let mos = |kind, w| T::mos(kind, nf, (w - 1) / nf + 1);
+
         let mut nor_pu_en = cell
             .generate_connected(
-                T::mos(nor_pu_en_params),
+                mos(TileKind::P, self.0.nor_pu_en_w),
                 MosIoSchematic {
                     d: io.schematic.vdd,
                     g: io.schematic.pd_ctl,
@@ -250,7 +254,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .orient(Orientation::ReflectVert);
         let mut nor_pu_data = cell
             .generate_connected(
-                T::mos(nor_pu_data_params),
+                mos(TileKind::P, self.0.nor_pu_data_w),
                 MosIoSchematic {
                     d: nor_x,
                     g: io.schematic.din,
@@ -260,16 +264,16 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             )
             .orient(Orientation::ReflectVert);
         let mut nor_pd_en = cell.generate_connected(
-            T::mos(nor_pd_en_params),
+            mos(TileKind::N, self.0.nor_pd_en_w),
             MosIoSchematic {
                 d: pd_en,
-                g: io.schematic.pu_ctl,
+                g: io.schematic.pd_ctl,
                 s: io.schematic.vss,
                 b: io.schematic.vss,
             },
         );
         let mut nor_pd_data = cell.generate_connected(
-            T::mos(nor_pd_data_params),
+            mos(TileKind::N, self.0.nor_pd_data_w),
             MosIoSchematic {
                 d: pd_en,
                 g: io.schematic.din,
@@ -277,47 +281,57 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 b: io.schematic.vss,
             },
         );
-        let mut driver_pd = cell
+        let mut driver_pd = cell.generate_connected(
+            mos(TileKind::N, self.0.driver_pd_w),
+            MosIoSchematic {
+                d: io.schematic.vss,
+                g: io.schematic.din,
+                s: pd_x,
+                b: io.schematic.vss,
+            },
+        );
+        let mut pd_res = cell.generate_connected(
+            T::resistor(
+                self.0.res_legs,
+                self.0.res_w,
+                self.0.pd_res_l,
+                self.0.pd_res_conn,
+            ),
+            ResistorIoSchematic {
+                p: io.schematic.dout,
+                n: pd_x,
+                b: io.schematic.vdd,
+            },
+        );
+        let mut pu_res = cell
             .generate_connected(
-                T::mos(driver_pd_params),
-                MosIoSchematic {
-                    d: io.schematic.vss,
-                    g: io.schematic.din,
-                    s: pd_x,
-                    b: io.schematic.vss,
-                },
-            )
-            .orient(Orientation::ReflectVert);
-        let mut pd_res = cell
-            .generate_connected(
-                T::resistor(pd_res_params),
+                T::resistor(
+                    self.0.res_legs,
+                    self.0.res_w,
+                    self.0.pu_res_l,
+                    self.0.pu_res_conn,
+                ),
                 ResistorIoSchematic {
                     p: io.schematic.dout,
-                    n: pd_x,
+                    n: pu_x,
                     b: io.schematic.vdd,
                 },
             )
             .orient(Orientation::ReflectVert);
-        let mut pu_res = cell.generate_connected(
-            T::resistor(pu_res_params),
-            ResistorIoSchematic {
-                p: io.schematic.dout,
-                n: pu_x,
-                b: io.schematic.vdd,
-            },
-        );
-        let mut driver_pu = cell.generate_connected(
-            T::mos(driver_pu_params),
-            MosIoSchematic {
-                d: io.schematic.vdd,
-                g: io.schematic.din,
-                s: pu_x,
-                b: io.schematic.vdd,
-            },
-        );
+        let mut driver_pu = cell
+            .generate_connected(
+                mos(TileKind::P, self.0.driver_pu_w),
+                MosIoSchematic {
+                    d: io.schematic.vdd,
+                    g: io.schematic.din,
+                    s: pu_x,
+                    b: io.schematic.vdd,
+                },
+            )
+            .orient(Orientation::ReflectVert);
         let mut nand_pu_en = cell
             .generate_connected(
-                T::mos(nand_pu_en_params),
+                mos(TileKind::P, self.0.nand_pu_en_w),
                 MosIoSchematic {
                     d: pu_en,
                     g: io.schematic.pu_ctl,
@@ -328,7 +342,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .orient(Orientation::ReflectVert);
         let mut nand_pu_data = cell
             .generate_connected(
-                T::mos(nand_pu_data_params),
+                mos(TileKind::P, self.0.nand_pu_data_w),
                 MosIoSchematic {
                     d: pu_en,
                     g: io.schematic.din,
@@ -338,16 +352,16 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             )
             .orient(Orientation::ReflectVert);
         let mut nand_pd_en = cell.generate_connected(
-            T::mos(nand_pd_en_params),
+            mos(TileKind::N, self.0.nand_pd_en_w),
             MosIoSchematic {
                 d: io.schematic.vss,
-                g: io.schematic.pd_ctl,
+                g: io.schematic.pu_ctl,
                 s: nand_x,
                 b: io.schematic.vss,
             },
         );
         let mut nand_pd_data = cell.generate_connected(
-            T::mos(nand_pd_data_params),
+            mos(TileKind::N, self.0.nand_pd_data_w),
             MosIoSchematic {
                 d: nand_x,
                 g: io.schematic.din,
@@ -356,10 +370,10 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             },
         );
 
-        let mut ntap_bot = cell.generate(T::tap(TapTileParams::new(TileKind::N, 1)));
-        let mut ptap = cell.generate(T::tap(TapTileParams::new(TileKind::P, 1)));
-        let mut ntap = cell.generate(T::tap(TapTileParams::new(TileKind::N, 1)));
-        let ptap_top = cell.generate(T::tap(TapTileParams::new(TileKind::P, 1)));
+        let mut ntap_bot = cell.generate(T::tap(TileKind::N, nf));
+        let mut ptap = cell.generate(T::tap(TileKind::P, nf));
+        let mut ntap = cell.generate(T::tap(TileKind::N, nf));
+        let ptap_top = cell.generate(T::tap(TileKind::P, nf));
         cell.connect(ntap_bot.io().x, io.schematic.vdd);
         cell.connect(ptap.io().x, io.schematic.vss);
         cell.connect(ntap.io().x, io.schematic.vdd);
