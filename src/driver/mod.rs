@@ -701,7 +701,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .collect::<Result<Vec<_>>>()?;
 
         let nf = T::nf(self.0.unit.res_legs, self.0.unit.res_w);
-        for unit in units.iter() {
+        for unit in units.iter().take(self.0.num_segments + 1) {
             let pu_bbox = unit.layout.data().driver_pu_bbox;
             let pu_loc = cell
                 .layer_stack
