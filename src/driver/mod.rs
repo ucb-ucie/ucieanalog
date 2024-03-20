@@ -17,11 +17,12 @@ use std::marker::PhantomData;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
-use substrate::geometry::align::AlignMode;
+use substrate::geometry::align::{AlignBbox, AlignMode};
 use substrate::geometry::bbox::Bbox;
 use substrate::geometry::dir::Dir;
 use substrate::geometry::point::Point;
 use substrate::geometry::rect::Rect;
+use substrate::geometry::sign::Sign;
 use substrate::geometry::span::Span;
 use substrate::geometry::transform::Translate;
 use substrate::io::layout::IoShape;
@@ -29,7 +30,7 @@ use substrate::io::{Array, InOut, Input, Io, MosIo, MosIoSchematic, Output, Sign
 use substrate::layout::bbox::LayerBbox;
 use substrate::layout::element::Shape;
 use substrate::layout::tracks::RoundingMode;
-use substrate::layout::{ExportsLayoutData, LayoutData};
+use substrate::layout::{ExportsLayoutData, Layout, LayoutData};
 use substrate::pdk::layers::HasPin;
 use substrate::pdk::layers::{Layer, LayerId};
 use substrate::pdk::{Pdk, PdkLayers};
@@ -127,10 +128,16 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     type TiedMosTile: Tile<PDK> + Block<Io = Signal> + Clone;
     /// The tap tile.
     type TapTile: Tile<PDK> + Block<Io = TapIo> + Clone;
+    /// A filler layout cell.
+    type Filler: Layout<PDK>;
+    /// A guard ring layout cell.
+    type GuardRing: Layout<PDK>;
     /// The resistor tile.
     type ResistorTile: Tile<PDK> + Block<Io = ResistorIo> + Clone;
     /// A PDK-specific via maker.
     type ViaMaker: ViaMaker<PDK>;
+    /// Height of guard ring top and bottom sides in layer 1 tracks.
+    const GUARD_RING_ANNULAR_HEIGHT: i64;
 
     /// Creates an instance of the MOS tile.
     fn mos(kind: TileKind, nf: i64, w: i64) -> Self::MosTile;
@@ -144,6 +151,11 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     fn nf(legs: i64, w: i64) -> i64;
     /// Creates an instance of the resistor tile.
     fn resistor(legs: i64, w: i64, l: i64, conn: ResistorConn) -> Self::ResistorTile;
+    /// Creates a filler to be placed around the edge of the guard ring with height given in layer 1 tracks.
+    fn filler(kind: TileKind, height: i64) -> Self::Filler;
+    /// Creates a guard ring around the given number of horizontally-arrayed MOS devices,
+    /// each with the given `nf`. `height` gives the height of the contained devices in layer 1 tracks.
+    fn guard_ring(kind: TileKind, n_device: i64, nf: i64, height: i64) -> Self::GuardRing;
     /// Creates a PDK-specific via maker.
     fn via_maker() -> Self::ViaMaker;
     /// Additional layout hooks to run after the inverter layout is complete.
@@ -202,6 +214,8 @@ pub struct HorizontalDriverUnitLayoutData {
     pub driver_ntap_bboxes: Vec<Rect>,
     pub driver_ptap_bboxes: Vec<Rect>,
     pub dout: Rect,
+    pub filler_bboxes: Vec<Rect>,
+    pub nwell_filler_bboxes: Vec<Rect>,
 }
 
 impl<T> HorizontalDriverUnit<T> {
@@ -415,27 +429,39 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         ntap_nand.align_mut(&nand_pu_en, AlignMode::Beneath, 0);
 
         ntap_driver_top.align_mut(&ntap_nand, AlignMode::Left, 0);
-        ntap_driver_top.align_mut(&ntap_nand, AlignMode::Beneath, -3);
+        ntap_driver_top.align_mut(
+            &ntap_nand,
+            AlignMode::Beneath,
+            -T::GUARD_RING_ANNULAR_HEIGHT,
+        );
         driver_pu.align_mut(&ntap_driver_top, AlignMode::Left, 0);
         driver_pu.align_mut(&ntap_driver_top, AlignMode::Beneath, 0);
         ntap_driver_bot.align_mut(&driver_pu, AlignMode::Left, 0);
         ntap_driver_bot.align_mut(&driver_pu, AlignMode::Beneath, 0);
 
         pu_res.align_mut(&ntap_driver_bot, AlignMode::Left, 0);
-        pu_res.align_mut(&ntap_driver_bot, AlignMode::Beneath, -3);
+        pu_res.align_mut(
+            &ntap_driver_bot,
+            AlignMode::Beneath,
+            -T::GUARD_RING_ANNULAR_HEIGHT,
+        );
 
         pd_res.align_mut(&pu_res, AlignMode::Left, 0);
         pd_res.align_mut(&pu_res, AlignMode::Beneath, 0);
 
         ptap_driver_top.align_mut(&pd_res, AlignMode::Left, 0);
-        ptap_driver_top.align_mut(&pd_res, AlignMode::Beneath, -3);
+        ptap_driver_top.align_mut(&pd_res, AlignMode::Beneath, -T::GUARD_RING_ANNULAR_HEIGHT);
         driver_pd.align_mut(&ptap_driver_top, AlignMode::Left, 0);
         driver_pd.align_mut(&ptap_driver_top, AlignMode::Beneath, 0);
         ptap_driver_bot.align_mut(&driver_pd, AlignMode::Left, 0);
         ptap_driver_bot.align_mut(&driver_pd, AlignMode::Beneath, 0);
 
         ptap_nor.align_mut(&ptap_driver_bot, AlignMode::Left, 0);
-        ptap_nor.align_mut(&ptap_driver_bot, AlignMode::Beneath, -3);
+        ptap_nor.align_mut(
+            &ptap_driver_bot,
+            AlignMode::Beneath,
+            -T::GUARD_RING_ANNULAR_HEIGHT,
+        );
         nor_pd_en.align_mut(&ptap_nor, AlignMode::Left, 0);
         nor_pd_en.align_mut(&ptap_nor, AlignMode::Beneath, 0);
         nor_pd_data.align_mut(&nor_pd_en, AlignMode::Left, 0);
@@ -450,24 +476,24 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let nor_pd_en = cell.draw(nor_pd_en)?;
         let nor_pd_data = cell.draw(nor_pd_data)?;
         let _nor_pu_en = cell.draw(nor_pu_en)?;
-        let _nor_pu_data = cell.draw(nor_pu_data)?;
+        let nor_pu_data = cell.draw(nor_pu_data)?;
         let driver_pd = cell.draw(driver_pd)?;
-        let _pd_res = cell.draw(pd_res)?;
+        let pd_res = cell.draw(pd_res)?;
         let pu_res = cell.draw(pu_res)?;
         let driver_pu = cell.draw(driver_pu)?;
         let nand_pd_en = cell.draw(nand_pd_en)?;
-        let _nand_pd_data = cell.draw(nand_pd_data)?;
+        let nand_pd_data = cell.draw(nand_pd_data)?;
         let _nand_pu_en = cell.draw(nand_pu_en)?;
-        let _nand_pu_data = cell.draw(nand_pu_data)?;
+        let nand_pu_data = cell.draw(nand_pu_data)?;
 
-        let _ntap_nor = cell.draw(ntap_nor)?;
-        let _ptap_nor = cell.draw(ptap_nor)?;
+        let ntap_nor = cell.draw(ntap_nor)?;
+        let ptap_nor = cell.draw(ptap_nor)?;
         let ptap_driver_top = cell.draw(ptap_driver_top)?;
         let ptap_driver_bot = cell.draw(ptap_driver_bot)?;
         let ntap_driver_top = cell.draw(ntap_driver_top)?;
         let ntap_driver_bot = cell.draw(ntap_driver_bot)?;
-        let _ntap_nand = cell.draw(ntap_nand)?;
-        let _ptap_nand = cell.draw(ptap_nand)?;
+        let ntap_nand = cell.draw(ntap_nand)?;
+        let ptap_nand = cell.draw(ptap_nand)?;
 
         cell.set_top_layer(3);
         cell.set_router(GreedyRouter);
@@ -530,6 +556,33 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     ptap_driver_top.layout.bbox_rect(),
                 ],
                 dout: dout_rect,
+                filler_bboxes: [
+                    (
+                        &ptap_nand.layout.bbox_rect(),
+                        &nand_pd_data.layout.bbox_rect(),
+                    ),
+                    (
+                        &nor_pd_data.layout.bbox_rect(),
+                        &ptap_nor.layout.bbox_rect(),
+                    ),
+                ]
+                .into_iter()
+                .map(|(a, b)| a.union(*b))
+                .collect(),
+                nwell_filler_bboxes: [
+                    (
+                        &ntap_nand.layout.bbox_rect(),
+                        &nand_pu_data.layout.bbox_rect(),
+                    ),
+                    (
+                        &nor_pu_data.layout.bbox_rect(),
+                        &ntap_nor.layout.bbox_rect(),
+                    ),
+                    (&pu_res.layout.bbox_rect(), &pd_res.layout.bbox_rect()),
+                ]
+                .into_iter()
+                .map(|(a, b)| a.union(*b))
+                .collect(),
             },
         ))
     }
@@ -594,14 +647,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         <Self as ExportsLayoutData>::LayoutData,
     )> {
         let mut units = Vec::new();
-        for i in 0..self.0.num_segments {
+        for i in 0..self.0.num_segments + 2 {
             let mut unit = cell.generate_connected(
                 HorizontalDriverUnit::<T>::new(self.0.unit),
                 DriverUnitIoSchematic {
                     din: io.schematic.din,
                     dout: io.schematic.dout,
-                    pu_ctl: io.schematic.pu_ctl[i],
-                    pd_ctl: io.schematic.pd_ctl[i],
+                    pu_ctl: if i == 0 || i == self.0.num_segments + 1 {
+                        io.schematic.vss
+                    } else {
+                        io.schematic.pu_ctl[i - 1]
+                    },
+                    pd_ctl: if i == 0 || i == self.0.num_segments + 1 {
+                        io.schematic.vss
+                    } else {
+                        io.schematic.pd_ctl[i - 1]
+                    },
                     vdd: io.schematic.vdd,
                     vss: io.schematic.vss,
                 },
@@ -620,8 +681,10 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 let unit = cell.draw(unit)?;
                 io.layout.din.merge(unit.layout.io().din);
                 io.layout.dout.merge(unit.layout.io().dout);
-                io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
-                io.layout.pd_ctl[i].merge(unit.layout.io().pd_ctl);
+                if i > 0 && i < self.0.num_segments + 1 {
+                    io.layout.pu_ctl[i - 1].merge(unit.layout.io().pu_ctl);
+                    io.layout.pd_ctl[i - 1].merge(unit.layout.io().pd_ctl);
+                }
                 io.layout.vdd.merge(unit.layout.io().vdd);
                 io.layout.vss.merge(unit.layout.io().vss);
                 Ok(unit)
@@ -629,7 +692,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .collect::<Result<Vec<_>>>()?;
 
         let nf = T::nf(self.0.unit.res_legs, self.0.unit.res_w);
-        for i in 0..self.0.num_segments - 1 {
+        for i in 0..self.0.num_segments + 1 {
             let pu_bbox = units[i].layout.data().driver_pu_bbox;
             let pu_loc = cell
                 .layer_stack
@@ -688,33 +751,73 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             }
         }
 
-        // let layer3 = &cell.layer_stack.layers[3];
-        // let din_connect_track = layer3.inner.tracks().to_track_idx(
-        //     units[0].layout.io().din.bbox_rect().top(),
-        //     RoundingMode::Nearest,
-        // );
-        // let din_pin = Rect::from_spans(
-        //     units[0].layout.io().din.bbox_rect().hspan(),
-        //     layer3.inner.tracks().get(din_connect_track),
-        // );
-        // cell.layout.draw(Shape::new(layer3.id, din_pin))?;
+        for sign in [Sign::Neg, Sign::Pos] {
+            let unit = &units[match sign {
+                Sign::Neg => 0,
+                Sign::Pos => self.0.num_segments + 1,
+            }];
+            for (bbox, kind) in unit
+                .layout
+                .data()
+                .filler_bboxes
+                .into_iter()
+                .map(|bbox| (bbox, TileKind::P))
+                .chain(
+                    unit.layout
+                        .data()
+                        .nwell_filler_bboxes
+                        .into_iter()
+                        .map(|bbox| (bbox, TileKind::N)),
+                )
+            {
+                let filler = cell
+                    .layout
+                    .generate(T::filler(
+                        kind,
+                        bbox.height() / cell.layer_stack.layer(1).pitch(),
+                    ))
+                    .align_bbox(
+                        match sign {
+                            Sign::Neg => AlignMode::ToTheLeft,
+                            Sign::Pos => AlignMode::ToTheRight,
+                        },
+                        bbox,
+                        0,
+                    )
+                    .align_bbox(AlignMode::Bottom, bbox, 0);
+                cell.layout.draw(filler)?;
+            }
+        }
+
+        let pu_bbox = units[0]
+            .layout
+            .data()
+            .driver_pu_bbox
+            .union(units[self.0.num_segments + 1].layout.data().driver_pu_bbox);
+        let pd_bbox = units[0]
+            .layout
+            .data()
+            .driver_pd_bbox
+            .union(units[self.0.num_segments + 1].layout.data().driver_pd_bbox);
+
+        for (bbox, kind, w) in [
+            (pu_bbox, TileKind::P, self.0.unit.driver_pu_w),
+            (pd_bbox, TileKind::N, self.0.unit.driver_pd_w),
+        ] {
+            let guard_ring = cell
+                .layout
+                .generate(T::guard_ring(
+                    kind,
+                    (self.0.num_segments + 2) as i64,
+                    nf,
+                    bbox.height() / cell.layer_stack.layer(1).pitch(),
+                ))
+                .align_bbox(AlignMode::CenterHorizontal, bbox, 0)
+                .align_bbox(AlignMode::CenterVertical, bbox, 0);
+            cell.layout.draw(guard_ring)?;
+        }
+
         let via_maker = T::via_maker();
-        // for shape in units[0].layout.io().din.shapes() {
-        //     let x_track = cell.layer_stack.layers[2]
-        //         .inner
-        //         .tracks()
-        //         .to_track_idx(shape.bbox_rect().center().x, RoundingMode::Nearest);
-        //     for shape in via_maker.draw_via(
-        //         cell.ctx().clone(),
-        //         TrackCoord {
-        //             layer: 3,
-        //             x: x_track,
-        //             y: din_connect_track,
-        //         },
-        //     ) {
-        //         cell.layout.draw(shape)?;
-        //     }
-        // }
 
         let bump_rect = Rect::from_spans(
             cell.layout.bbox_rect().hspan(),
@@ -747,7 +850,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 2,
-                        period: 12,
+                        period: 3,
                     },
                 ],
             ),
