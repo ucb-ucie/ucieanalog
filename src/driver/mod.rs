@@ -9,6 +9,7 @@ use crate::tiles::{
 use atoll::abs::TrackCoord;
 use atoll::grid::AtollLayer;
 use atoll::route::{GreedyRouter, ViaMaker};
+use atoll::straps::{GreedyStrapper, LayerStrappingParams, StrappingParams};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -735,9 +736,66 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             }
         }
 
+        cell.set_strapping(
+            io.schematic.din,
+            StrappingParams::new(
+                2,
+                vec![
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 2,
+                        period: 3,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 2,
+                        period: 12,
+                    },
+                ],
+            ),
+        );
+        cell.set_strapping(
+            io.schematic.vss,
+            StrappingParams::new(
+                1,
+                vec![
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 0,
+                        period: 3,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 0,
+                        period: 3,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 0,
+                        period: 3,
+                    },
+                ],
+            ),
+        );
+        cell.set_strapping(
+            io.schematic.vdd,
+            StrappingParams::new(
+                1,
+                vec![
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 1,
+                        period: 3,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 1,
+                        period: 3,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 1,
+                        period: 3,
+                    },
+                ],
+            ),
+        );
         cell.set_top_layer(3);
-        // // cell.set_router(GreedyRouter);
-        // // cell.set_via_maker(T::via_maker());
+        cell.set_strapper(GreedyStrapper);
+        // cell.set_router(GreedyRouter);
+        cell.set_via_maker(T::via_maker());
 
         T::post_layout_hooks(cell)?;
 
