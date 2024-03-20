@@ -20,7 +20,6 @@ use substrate::error::Result;
 use substrate::geometry::align::{AlignBbox, AlignMode};
 use substrate::geometry::bbox::Bbox;
 use substrate::geometry::dir::Dir;
-use substrate::geometry::point::Point;
 use substrate::geometry::rect::Rect;
 use substrate::geometry::sign::Sign;
 use substrate::geometry::span::Span;
@@ -207,14 +206,24 @@ pub struct HorizontalDriverUnit<T>(
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
 
+/// Layout data returned by the [`HorizontalDriverUnit`] layout generator.
 #[derive(LayoutData)]
 pub struct HorizontalDriverUnitLayoutData {
+    /// Bounding box of the driver pull-down transistor.
     pub driver_pd_bbox: Rect,
+    /// Bounding box of the driver pull-up transistor.
     pub driver_pu_bbox: Rect,
+    /// Bounding boxes of the driver n-taps.
     pub driver_ntap_bboxes: Vec<Rect>,
+    /// Bounding boxes of the driver p-taps.
     pub driver_ptap_bboxes: Vec<Rect>,
+    /// The `dout` pin geometry located on layer 3.
     pub dout: Rect,
+    /// Bounding boxes of geometry that requires fillers on the edges
+    /// (i.e. not surrounded by guard ring).
     pub filler_bboxes: Vec<Rect>,
+    /// Bounding boxes of geometry that requires n-well fillers on the edges
+    /// (i.e. not surrounded by guard ring).
     pub nwell_filler_bboxes: Vec<Rect>,
 }
 
@@ -409,7 +418,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let mut ntap_driver_bot = cell.generate(T::tap(TileKind::N, nf));
         let mut ntap_driver_top = cell.generate(T::tap(TileKind::N, nf));
         let mut ntap_nand = cell.generate(T::tap(TileKind::N, nf));
-        let mut ptap_nand = cell.generate(T::tap(TileKind::P, nf));
+        let ptap_nand = cell.generate(T::tap(TileKind::P, nf));
         for tap in [&ntap_nor, &ntap_driver_bot, &ntap_driver_top, &ntap_nand] {
             cell.connect(tap.io().x, io.schematic.vdd);
         }
@@ -692,8 +701,8 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .collect::<Result<Vec<_>>>()?;
 
         let nf = T::nf(self.0.unit.res_legs, self.0.unit.res_w);
-        for i in 0..self.0.num_segments + 1 {
-            let pu_bbox = units[i].layout.data().driver_pu_bbox;
+        for unit in units.iter() {
+            let pu_bbox = unit.layout.data().driver_pu_bbox;
             let pu_loc = cell
                 .layer_stack
                 .slice(0..2)
@@ -706,7 +715,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 .orient(Orientation::ReflectVert)
                 .align_rect(pu_loc, AlignMode::CenterVertical, 0)
                 .align_rect(pu_loc, AlignMode::CenterHorizontal, 0);
-            let pd_bbox = units[i].layout.data().driver_pd_bbox;
+            let pd_bbox = unit.layout.data().driver_pd_bbox;
             let pd_loc = cell
                 .layer_stack
                 .slice(0..2)
@@ -719,18 +728,17 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 .align_rect(pd_loc, AlignMode::CenterVertical, 0)
                 .align_rect(pd_loc, AlignMode::CenterHorizontal, 0);
 
-            let dummy_pu = cell.draw(dummy_pu)?;
-            let dummy_pd = cell.draw(dummy_pd)?;
+            let _dummy_pu = cell.draw(dummy_pu)?;
+            let _dummy_pd = cell.draw(dummy_pd)?;
 
-            for (tap_bbox, kind, node) in units[i]
+            for (tap_bbox, kind, node) in unit
                 .layout
                 .data()
                 .driver_ntap_bboxes
                 .iter()
                 .map(|bbox| (*bbox, TileKind::N, io.schematic.vdd))
                 .chain(
-                    units[i]
-                        .layout
+                    unit.layout
                         .data()
                         .driver_ptap_bboxes
                         .iter()
@@ -747,7 +755,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     .align_rect(tap_loc, AlignMode::CenterVertical, 0)
                     .align_rect(tap_loc, AlignMode::CenterHorizontal, 0);
 
-                let tap = cell.draw(tap)?;
+                let _tap = cell.draw(tap)?;
             }
         }
 
@@ -800,10 +808,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .driver_pd_bbox
             .union(units[self.0.num_segments + 1].layout.data().driver_pd_bbox);
 
-        for (bbox, kind, w) in [
-            (pu_bbox, TileKind::P, self.0.unit.driver_pu_w),
-            (pd_bbox, TileKind::N, self.0.unit.driver_pd_w),
-        ] {
+        for (bbox, kind) in [(pu_bbox, TileKind::P), (pd_bbox, TileKind::N)] {
             let guard_ring = cell
                 .layout
                 .generate(T::guard_ring(
