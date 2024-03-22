@@ -17,7 +17,7 @@ use std::marker::PhantomData;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
-use substrate::geometry::align::{AlignBbox, AlignMode};
+use substrate::geometry::align::{AlignBbox, AlignMode, AlignRect};
 use substrate::geometry::bbox::Bbox;
 use substrate::geometry::dir::Dir;
 use substrate::geometry::rect::Rect;
@@ -151,7 +151,11 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     /// Creates an instance of the resistor tile.
     fn resistor(legs: i64, w: i64, l: i64, conn: ResistorConn) -> Self::ResistorTile;
     /// Creates a filler to be placed around the edge of the guard ring with height given in layer 1 tracks.
-    fn filler(kind: TileKind, height: i64) -> Self::Filler;
+    ///
+    /// Provides the side of the layout that the filler is located on.
+    fn filler(kind: TileKind, height: i64, side: Sign) -> Self::Filler;
+    /// Returns the filler boundary layer ID.
+    fn filler_boundary_id(layers: &PdkLayers<PDK>) -> LayerId;
     /// Creates a guard ring around the given number of horizontally-arrayed MOS devices,
     /// each with the given `nf`. `height` gives the height of the contained devices in layer 1 tracks.
     fn guard_ring(kind: TileKind, n_device: i64, nf: i64, height: i64) -> Self::GuardRing;
@@ -778,21 +782,24 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                         .map(|bbox| (bbox, TileKind::N)),
                 )
             {
-                let filler = cell
-                    .layout
-                    .generate(T::filler(
-                        kind,
-                        bbox.height() / cell.layer_stack.layer(1).pitch(),
-                    ))
-                    .align_bbox(
+                let filler_id = T::filler_boundary_id(&cell.ctx().layers);
+                let filler = cell.layout.generate(T::filler(
+                    kind,
+                    bbox.height() / cell.layer_stack.layer(1).pitch(),
+                    sign,
+                ));
+                let layer_bbox = filler.layer_bbox(filler_id).unwrap();
+                let filler = filler
+                    .align(
                         match sign {
                             Sign::Neg => AlignMode::ToTheLeft,
                             Sign::Pos => AlignMode::ToTheRight,
                         },
+                        layer_bbox,
                         bbox,
                         0,
                     )
-                    .align_bbox(AlignMode::Bottom, bbox, 0);
+                    .align(AlignMode::Bottom, layer_bbox, bbox, 0);
                 cell.layout.draw(filler)?;
             }
         }
