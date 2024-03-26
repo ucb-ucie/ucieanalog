@@ -548,7 +548,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
 
-        // Route `dout` to center track.
+        // Route IOs to specific layer 2 tracks.
         let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
         let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
         let center_track_y = cell.layer_stack.layers[3]
@@ -891,14 +891,6 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
 
         let via_maker = T::via_maker();
 
-        // TODO: add bump rect at higher level
-        // let bump_rect = Rect::from_spans(
-        //     cell.layout.bbox_rect().hspan(),
-        //     Span::from_center_span(units[0].layout.data().dout.bbox_rect().center().y, 1080),
-        // );
-        // cell.layout
-        //     .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
-
         let mut via_stack: Vec<(usize, Shape)> = Vec::new();
         for layer in 4..8 {
             via_stack.extend(
@@ -945,16 +937,36 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
         cell.layout
             .draw(Shape::new(virtual_layers.outline, overall_bbox))?;
-        let pu_network_bbox = top_slice
+        let guard_ring_p_bbox = top_slice
             .expand_to_lcm_units(Rect::from_spans(
                 cell.layout.bbox_rect().hspan(),
                 guard_ring_p.layout.bbox_rect().vspan(),
             ))
             .translate(Point::zero() - overall_bbox.corner(Corner::LowerLeft));
-        let pd_network_bbox = top_slice
+        let guard_ring_n_bbox = top_slice
             .expand_to_lcm_units(Rect::from_spans(
                 cell.layout.bbox_rect().hspan(),
                 guard_ring_n.layout.bbox_rect().vspan(),
+            ))
+            .translate(Point::zero() - overall_bbox.corner(Corner::LowerLeft));
+        let pu_network_bbox = top_slice
+            .expand_to_lcm_units(Rect::from_spans(
+                cell.layout.bbox_rect().hspan(),
+                guard_ring_p
+                    .layout
+                    .bbox_rect()
+                    .vspan()
+                    .add_point(cell.layout.bbox_rect().top()),
+            ))
+            .translate(Point::zero() - overall_bbox.corner(Corner::LowerLeft));
+        let pd_network_bbox = top_slice
+            .expand_to_lcm_units(Rect::from_spans(
+                cell.layout.bbox_rect().hspan(),
+                guard_ring_n
+                    .layout
+                    .bbox_rect()
+                    .vspan()
+                    .add_point(cell.layout.bbox_rect().bot()),
             ))
             .translate(Point::zero() - overall_bbox.corner(Corner::LowerLeft));
         cell.set_strapping(
@@ -962,7 +974,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 2 },
+                    LayerStrappingParams::ViaDown { min_period: 3 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 3,
                         period: 5,
@@ -981,16 +993,16 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     },
                 ],
             )
-            .with_bounds(pu_network_bbox),
+            .with_bounds(guard_ring_p_bbox),
         );
         cell.set_strapping(
             io.schematic.guard_ring_vdd,
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 2 },
+                    LayerStrappingParams::ViaDown { min_period: 3 },
                     LayerStrappingParams::OffsetPeriod {
-                        offset: 3,
+                        offset: 2,
                         period: 5,
                     },
                     LayerStrappingParams::OffsetPeriod {
@@ -1007,7 +1019,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     },
                 ],
             )
-            .with_bounds(pd_network_bbox),
+            .with_bounds(guard_ring_n_bbox),
         );
 
         cell.set_strapping(
@@ -1015,7 +1027,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 2 },
+                    LayerStrappingParams::ViaDown { min_period: 1 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 2,
                         period: 5,
@@ -1037,10 +1049,20 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         );
         cell.set_strapping(
             io.schematic.vss,
+            StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
+                .with_bounds(pu_network_bbox),
+        );
+        cell.set_strapping(
+            io.schematic.vss,
+            StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
+                .with_bounds(pd_network_bbox),
+        );
+        cell.set_strapping(
+            io.schematic.vss,
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 2 },
+                    LayerStrappingParams::ViaDown { min_period: 3 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
                         period: 5,
@@ -1062,10 +1084,20 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         );
         cell.set_strapping(
             io.schematic.vdd,
+            StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
+                .with_bounds(pu_network_bbox),
+        );
+        cell.set_strapping(
+            io.schematic.vdd,
+            StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
+                .with_bounds(pd_network_bbox),
+        );
+        cell.set_strapping(
+            io.schematic.vdd,
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 2 },
+                    LayerStrappingParams::ViaDown { min_period: 3 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
                         period: 5,
