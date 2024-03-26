@@ -298,7 +298,6 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         <Self as ExportsLayoutData>::LayoutData,
     )> {
         let nf = T::nf(self.0.res_legs, self.0.res_w);
-        assert_eq!(nf % 2, 0);
 
         let nor_x = cell.signal("nor_x", Signal::new());
         let nand_x = cell.signal("nand_x", Signal::new());
