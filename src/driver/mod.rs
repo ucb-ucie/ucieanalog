@@ -19,7 +19,9 @@ use substrate::block::Block;
 use substrate::error::Result;
 use substrate::geometry::align::{AlignBbox, AlignMode, AlignRect};
 use substrate::geometry::bbox::Bbox;
+use substrate::geometry::corner::Corner;
 use substrate::geometry::dir::Dir;
+use substrate::geometry::point::Point;
 use substrate::geometry::rect::Rect;
 use substrate::geometry::sign::Sign;
 use substrate::geometry::span::Span;
@@ -92,6 +94,27 @@ pub struct DriverUnitParams {
 
 /// The interface to a driver.
 #[derive(Debug, Clone, Io)]
+pub struct DriverWithGuardRingRailsIo {
+    /// The buffer input.
+    pub din: Input<Signal>,
+    /// The buffered output.
+    pub dout: Output<Signal>,
+    /// The pull-up control.
+    pub pu_ctl: Array<Input<Signal>>,
+    /// The pull-down control.
+    pub pd_ctl: Array<Input<Signal>>,
+    /// The VDD rail.
+    pub vdd: InOut<Signal>,
+    /// The VSS rail.
+    pub vss: InOut<Signal>,
+    /// The guard ring VDD rail.
+    pub guard_ring_vdd: InOut<Signal>,
+    /// The guard ring VSS rail.
+    pub guard_ring_vss: InOut<Signal>,
+}
+
+/// The interface to a driver.
+#[derive(Debug, Clone, Io)]
 pub struct DriverIo {
     /// The buffer input.
     pub din: Input<Signal>,
@@ -129,8 +152,8 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     type TapTile: Tile<PDK> + Block<Io = TapIo> + Clone;
     /// A filler layout cell.
     type Filler: Layout<PDK>;
-    /// A guard ring layout cell.
-    type GuardRing: Layout<PDK>;
+    /// A guard ring tile.
+    type GuardRingTile: Tile<PDK> + Block<Io = TapIo> + Clone;
     /// The resistor tile.
     type ResistorTile: Tile<PDK> + Block<Io = ResistorIo> + Clone;
     /// A PDK-specific via maker.
@@ -158,7 +181,7 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     fn filler_boundary_id(layers: &PdkLayers<PDK>) -> LayerId;
     /// Creates a guard ring around the given number of horizontally-arrayed MOS devices,
     /// each with the given `nf`. `height` gives the height of the contained devices in layer 1 tracks.
-    fn guard_ring(kind: TileKind, n_device: i64, nf: i64, height: i64) -> Self::GuardRing;
+    fn guard_ring(kind: TileKind, n_device: i64, nf: i64, height: i64) -> Self::GuardRingTile;
     /// Creates a PDK-specific via maker.
     fn via_maker() -> Self::ViaMaker;
     /// Additional layout hooks to run after the inverter layout is complete.
@@ -330,7 +353,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             mos(TileKind::N, self.0.driver_pd_w),
             MosIoSchematic {
                 d: pd_x,
-                g: io.schematic.din,
+                g: pd_en,
                 s: io.schematic.vss,
                 b: io.schematic.vss,
             },
@@ -368,7 +391,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 mos(TileKind::P, self.0.driver_pu_w),
                 MosIoSchematic {
                     d: pu_x,
-                    g: io.schematic.din,
+                    g: pu_en,
                     s: io.schematic.vdd,
                     b: io.schematic.vdd,
                 },
@@ -486,6 +509,19 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         ntap_nor.align_mut(&nor_pu_en, AlignMode::Left, 0);
         ntap_nor.align_mut(&nor_pu_en, AlignMode::Beneath, 0);
 
+        for (top, bot) in [
+            (ntap_nand.lcm_bounds(), ntap_driver_top.lcm_bounds()),
+            (ntap_driver_bot.lcm_bounds(), pu_res.lcm_bounds()),
+            (pd_res.lcm_bounds(), ptap_driver_top.lcm_bounds()),
+            (ptap_driver_bot.lcm_bounds(), ptap_nor.lcm_bounds()),
+        ] {
+            cell.assign_grid_points(
+                None,
+                0,
+                Rect::from_spans(top.hspan(), Span::new(bot.top(), top.bot())),
+            );
+        }
+
         let nor_pd_en = cell.draw(nor_pd_en)?;
         let nor_pd_data = cell.draw(nor_pd_data)?;
         let _nor_pu_en = cell.draw(nor_pu_en)?;
@@ -536,7 +572,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         );
 
         cell.assign_grid_points(
-            io.schematic.dout,
+            Some(io.schematic.dout),
             3,
             cell.layer_stack
                 .slice(0..4)
@@ -552,6 +588,10 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         io.layout.pd_ctl.merge(nor_pd_en.layout.io().g);
         io.layout.vdd.merge(ntap_driver_top.layout.io().x);
         io.layout.vss.merge(ptap_driver_bot.layout.io().x);
+
+        cell.skip_routing_all(io.schematic.vss);
+        cell.skip_routing_all(io.schematic.vdd);
+        cell.skip_routing_all(io.schematic.din);
 
         T::post_layout_hooks(cell)?;
 
@@ -604,20 +644,20 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
 /// A horizontal driver.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
-pub struct HorizontalDriver<T>(
+pub struct HorizontalDriverWithGuardRingRails<T>(
     DriverParams,
     #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
 );
 
-impl<T> HorizontalDriver<T> {
-    /// Creates a new [`HorizontalDriver`].
+impl<T> HorizontalDriverWithGuardRingRails<T> {
+    /// Creates a new [`HorizontalDriverWithGuardRingRails`].
     pub fn new(params: DriverParams) -> Self {
         Self(params, PhantomData)
     }
 }
 
-impl<T: Any> Block for HorizontalDriver<T> {
-    type Io = DriverIo;
+impl<T: Any> Block for HorizontalDriverWithGuardRingRails<T> {
+    type Io = DriverWithGuardRingRailsIo;
 
     fn id() -> ArcStr {
         substrate::arcstr::literal!("horizontal_driver")
@@ -629,27 +669,36 @@ impl<T: Any> Block for HorizontalDriver<T> {
     }
 
     fn io(&self) -> Self::Io {
-        DriverIo {
+        DriverWithGuardRingRailsIo {
             din: Default::default(),
             dout: Default::default(),
             pu_ctl: Array::new(self.0.num_segments, Default::default()),
             pd_ctl: Array::new(self.0.num_segments, Default::default()),
             vdd: Default::default(),
             vss: Default::default(),
+            guard_ring_vdd: Default::default(),
+            guard_ring_vss: Default::default(),
         }
     }
 }
 
-impl<T: Any> ExportsNestedData for HorizontalDriver<T> {
+impl<T: Any> ExportsNestedData for HorizontalDriverWithGuardRingRails<T> {
     type NestedData = ();
 }
 
-impl<T: Any> ExportsLayoutData for HorizontalDriver<T> {
-    type LayoutData = ();
+/// Layout data returned by the [`HorizontalDriverWithGuardRingRails`] layout generator.
+#[derive(LayoutData)]
+pub struct HorizontalDriverWithGuardRingRailsLayoutData {
+    /// The `dout` pin geometry located on layer 7.
+    pub dout: Vec<Rect>,
+}
+
+impl<T: Any> ExportsLayoutData for HorizontalDriverWithGuardRingRails<T> {
+    type LayoutData = HorizontalDriverWithGuardRingRailsLayoutData;
 }
 
 impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
-    for HorizontalDriver<T>
+    for HorizontalDriverWithGuardRingRails<T>
 {
     fn tile<'a>(
         &self,
@@ -815,54 +864,173 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .driver_pd_bbox
             .union(units[self.0.num_segments + 1].layout.data().driver_pd_bbox);
 
-        for (bbox, kind) in [(pu_bbox, TileKind::P), (pd_bbox, TileKind::N)] {
+        let mut guard_rings = Vec::new();
+        for (bbox, kind, node) in [
+            (pu_bbox, TileKind::P, io.schematic.guard_ring_vss),
+            (pd_bbox, TileKind::N, io.schematic.guard_ring_vdd),
+        ] {
+            let bbox_lcm = cell.layer_stack.slice(0..2).expand_to_lcm_units(bbox);
             let guard_ring = cell
-                .layout
-                .generate(T::guard_ring(
-                    kind,
-                    (self.0.num_segments + 2) as i64,
-                    nf,
-                    bbox.height() / cell.layer_stack.layer(1).pitch(),
-                ))
-                .align_bbox(AlignMode::CenterHorizontal, bbox, 0)
-                .align_bbox(AlignMode::CenterVertical, bbox, 0);
-            cell.layout.draw(guard_ring)?;
+                .generate_connected(
+                    T::guard_ring(
+                        kind,
+                        (self.0.num_segments + 2) as i64,
+                        nf,
+                        bbox.height() / cell.layer_stack.layer(1).pitch(),
+                    ),
+                    TapIoSchematic { x: node },
+                )
+                .align_rect(bbox_lcm, AlignMode::CenterVertical, 0)
+                .align_rect(bbox_lcm, AlignMode::CenterHorizontal, 0);
+            guard_rings.push(cell.draw(guard_ring)?);
         }
+        let guard_ring_n = guard_rings.pop().unwrap();
+        let guard_ring_p = guard_rings.pop().unwrap();
+        io.layout.guard_ring_vdd.merge(guard_ring_n.layout.io().x);
+        io.layout.guard_ring_vss.merge(guard_ring_p.layout.io().x);
 
         let via_maker = T::via_maker();
 
-        let bump_rect = Rect::from_spans(
-            cell.layout.bbox_rect().hspan(),
-            Span::from_center_span(units[0].layout.data().dout.bbox_rect().center().y, 1080),
-        );
-        cell.layout
-            .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
+        // TODO: add bump rect at higher level
+        // let bump_rect = Rect::from_spans(
+        //     cell.layout.bbox_rect().hspan(),
+        //     Span::from_center_span(units[0].layout.data().dout.bbox_rect().center().y, 1080),
+        // );
+        // cell.layout
+        //     .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
 
-        let mut via_stack = Vec::new();
-        for layer in 4..10 {
-            via_stack
-                .extend(via_maker.draw_via(cell.ctx().clone(), TrackCoord { layer, x: 0, y: 0 }))
+        let mut via_stack: Vec<(usize, Shape)> = Vec::new();
+        for layer in 4..8 {
+            via_stack.extend(
+                via_maker
+                    .draw_via(cell.ctx().clone(), TrackCoord { layer, x: 0, y: 0 })
+                    .into_iter()
+                    .map(|shape| (layer, shape)),
+            );
         }
+        let mut dout = Vec::new();
         for unit in units.iter() {
-            for shape in &via_stack {
-                cell.layout.draw(shape.clone().translate(
+            for (layer, shape) in &via_stack {
+                let shape = shape.clone().translate(
                     unit.layout.data().dout.bbox_rect().center() - shape.bbox_rect().center(),
-                ))?;
+                );
+                cell.layout.draw(shape.clone())?;
+                if *layer == 7 {
+                    dout.push(shape.bbox_rect());
+                }
+
+                for layer in [*layer, *layer - 1] {
+                    let tracks = cell.layer_stack.tracks(layer);
+                    let perp_tracks = cell.layer_stack.tracks(layer - 1);
+                    let (xtracks, ytracks) = match cell.layer_stack.layer(layer).dir().track_dir() {
+                        Dir::Horiz => (perp_tracks, tracks),
+                        Dir::Vert => (tracks, perp_tracks),
+                    };
+                    let bot_track = ytracks.to_track_idx(shape.bbox_rect().bot(), RoundingMode::Up);
+                    let top_track =
+                        ytracks.to_track_idx(shape.bbox_rect().top(), RoundingMode::Down);
+                    let left_track =
+                        xtracks.to_track_idx(shape.bbox_rect().left(), RoundingMode::Up);
+                    let right_track =
+                        xtracks.to_track_idx(shape.bbox_rect().right(), RoundingMode::Down);
+                    let assigned_tracks =
+                        Rect::from_sides(left_track, bot_track, right_track, top_track);
+                    cell.assign_grid_points(None, layer, assigned_tracks);
+                }
             }
         }
+
+        let top_slice = cell.layer_stack.slice(0..8);
+        let overall_bbox = top_slice.expand_to_lcm_units(cell.layout.bbox_rect());
+        let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
+        cell.layout
+            .draw(Shape::new(virtual_layers.outline, overall_bbox))?;
+        let pu_network_bbox = top_slice
+            .expand_to_lcm_units(Rect::from_spans(
+                cell.layout.bbox_rect().hspan(),
+                guard_ring_p.layout.bbox_rect().vspan(),
+            ))
+            .translate(Point::zero() - overall_bbox.corner(Corner::LowerLeft));
+        let pd_network_bbox = top_slice
+            .expand_to_lcm_units(Rect::from_spans(
+                cell.layout.bbox_rect().hspan(),
+                guard_ring_n.layout.bbox_rect().vspan(),
+            ))
+            .translate(Point::zero() - overall_bbox.corner(Corner::LowerLeft));
+        cell.set_strapping(
+            io.schematic.guard_ring_vss,
+            StrappingParams::new(
+                1,
+                vec![
+                    LayerStrappingParams::ViaDown { min_period: 3 },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 3,
+                        period: 4,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 12,
+                    },
+                ],
+            )
+            .with_bounds(pu_network_bbox),
+        );
+        cell.set_strapping(
+            io.schematic.guard_ring_vdd,
+            StrappingParams::new(
+                1,
+                vec![
+                    LayerStrappingParams::ViaDown { min_period: 3 },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 3,
+                        period: 4,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 12,
+                    },
+                ],
+            )
+            .with_bounds(pd_network_bbox),
+        );
 
         cell.set_strapping(
             io.schematic.din,
             StrappingParams::new(
-                2,
+                1,
                 vec![
+                    LayerStrappingParams::ViaDown { min_period: 3 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 2,
-                        period: 3,
+                        period: 4,
                     },
                     LayerStrappingParams::OffsetPeriod {
-                        offset: 2,
-                        period: 3,
+                        offset: 8,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 8,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 8,
+                        period: 12,
                     },
                 ],
             ),
@@ -872,17 +1040,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
+                    LayerStrappingParams::ViaDown { min_period: 3 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 3,
+                        period: 4,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 3,
+                        period: 12,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 3,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 0,
+                        period: 12,
                     },
                 ],
             ),
@@ -892,24 +1065,194 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
+                    LayerStrappingParams::ViaDown { min_period: 3 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
-                        period: 3,
+                        period: 4,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
-                        period: 3,
+                        period: 12,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
-                        period: 3,
+                        period: 12,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 1,
+                        period: 12,
                     },
                 ],
             ),
         );
-        cell.set_top_layer(3);
+
+        cell.set_top_layer(7);
         cell.set_strapper(GreedyStrapper);
-        // cell.set_router(GreedyRouter);
+        cell.set_via_maker(via_maker);
+
+        T::post_layout_hooks(cell)?;
+
+        Ok(((), HorizontalDriverWithGuardRingRailsLayoutData { dout }))
+    }
+}
+
+/// A horizontal driver.
+#[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
+pub struct HorizontalDriver<T>(
+    DriverParams,
+    #[serde(bound(deserialize = ""))] PhantomData<fn() -> T>,
+);
+
+impl<T> HorizontalDriver<T> {
+    /// Creates a new [`HorizontalDriver`].
+    pub fn new(params: DriverParams) -> Self {
+        Self(params, PhantomData)
+    }
+}
+
+impl<T: Any> Block for HorizontalDriver<T> {
+    type Io = DriverIo;
+
+    fn id() -> ArcStr {
+        substrate::arcstr::literal!("horizontal_driver")
+    }
+
+    // todo: include parameters in name
+    fn name(&self) -> ArcStr {
+        substrate::arcstr::literal!("horizontal_driver")
+    }
+
+    fn io(&self) -> Self::Io {
+        DriverIo {
+            din: Default::default(),
+            dout: Default::default(),
+            pu_ctl: Array::new(self.0.num_segments, Default::default()),
+            pd_ctl: Array::new(self.0.num_segments, Default::default()),
+            vdd: Default::default(),
+            vss: Default::default(),
+        }
+    }
+}
+
+impl<T: Any> ExportsNestedData for HorizontalDriver<T> {
+    type NestedData = ();
+}
+
+impl<T: Any> ExportsLayoutData for HorizontalDriver<T> {
+    type LayoutData = ();
+}
+
+impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
+    for HorizontalDriver<T>
+{
+    fn tile<'a>(
+        &self,
+        io: IoBuilder<'a, Self>,
+        cell: &mut TileBuilder<'a, PDK>,
+    ) -> substrate::error::Result<(
+        <Self as ExportsNestedData>::NestedData,
+        <Self as ExportsLayoutData>::LayoutData,
+    )> {
+        let driver = cell.generate(HorizontalDriverWithGuardRingRails::<T>::new(self.0));
+
+        let driver = cell.draw(driver)?;
+
+        cell.connect(driver.schematic.io().din, io.schematic.din);
+        cell.connect(driver.schematic.io().dout, io.schematic.dout);
+        cell.connect(driver.schematic.io().vdd, io.schematic.vdd);
+        cell.connect(driver.schematic.io().vss, io.schematic.vss);
+        cell.connect(driver.schematic.io().guard_ring_vdd, io.schematic.vdd);
+        cell.connect(driver.schematic.io().guard_ring_vss, io.schematic.vss);
+        io.layout.din.merge(driver.layout.io().din);
+        io.layout.dout.merge(driver.layout.io().dout);
+        io.layout.vdd.merge(driver.layout.io().vdd);
+        io.layout.vss.merge(driver.layout.io().vss);
+        for i in 0..self.0.num_segments {
+            cell.connect(driver.schematic.io().pu_ctl[i], io.schematic.pu_ctl[i]);
+            cell.connect(driver.schematic.io().pd_ctl[i], io.schematic.pd_ctl[i]);
+            io.layout.pu_ctl[i].merge(driver.layout.io().pu_ctl[i].clone());
+            io.layout.pd_ctl[i].merge(driver.layout.io().pd_ctl[i].clone());
+        }
+
+        let via_maker = T::via_maker();
+
+        let bump_rect = Rect::from_spans(
+            cell.layout.bbox_rect().hspan(),
+            Span::from_center_span(driver.layout.data().dout[0].center().y, 1080),
+        );
+        cell.layout
+            .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
+
+        let mut via_stack: Vec<(usize, Shape)> = Vec::new();
+        for layer in 8..10 {
+            via_stack.extend(
+                via_maker
+                    .draw_via(cell.ctx().clone(), TrackCoord { layer, x: 0, y: 0 })
+                    .into_iter()
+                    .map(|shape| (layer, shape)),
+            );
+        }
+        for dout in driver.layout.data().dout {
+            for (_layer, shape) in &via_stack {
+                let shape = shape
+                    .clone()
+                    .translate(dout.center() - shape.bbox_rect().center());
+                cell.layout.draw(shape.clone())?;
+            }
+        }
+
+        cell.set_strapping(
+            io.schematic.din,
+            StrappingParams::new(
+                6,
+                vec![
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 8,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 5,
+                        period: 8,
+                    },
+                ],
+            ),
+        );
+        cell.set_strapping(
+            io.schematic.vss,
+            StrappingParams::new(
+                6,
+                vec![
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 2,
+                        period: 8,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 2,
+                        period: 8,
+                    },
+                ],
+            ),
+        );
+        cell.set_strapping(
+            io.schematic.vdd,
+            StrappingParams::new(
+                6,
+                vec![
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 1,
+                        period: 8,
+                    },
+                    LayerStrappingParams::OffsetPeriod {
+                        offset: 1,
+                        period: 8,
+                    },
+                ],
+            ),
+        );
+
+        cell.set_top_layer(9);
+        cell.set_strapper(GreedyStrapper);
         cell.set_via_maker(T::via_maker());
 
         T::post_layout_hooks(cell)?;
@@ -1214,7 +1557,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
             let track_rect = Rect::from_spans(layer2.inner.tracks().get(track), bbox.vspan());
             cell.layout.draw(Shape::new(layer2.id, track_rect))?;
             cell.assign_grid_points(
-                io.schematic.din,
+                Some(io.schematic.din),
                 2,
                 cell.layer_stack
                     .slice(0..3)
@@ -1247,7 +1590,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
         );
 
         cell.assign_grid_points(
-            io.schematic.dout,
+            Some(io.schematic.dout),
             2,
             cell.layer_stack
                 .slice(0..3)
