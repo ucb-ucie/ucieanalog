@@ -962,22 +962,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 3 },
+                    LayerStrappingParams::ViaDown { min_period: 2 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 3,
-                        period: 4,
+                        period: 5,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
-                        period: 12,
+                        period: 11,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
-                        period: 12,
+                        period: 9,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
-                        period: 12,
+                        period: 13,
                     },
                 ],
             )
@@ -988,22 +988,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 3 },
+                    LayerStrappingParams::ViaDown { min_period: 2 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 3,
-                        period: 4,
+                        period: 5,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
-                        period: 12,
+                        period: 11,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
-                        period: 12,
+                        period: 9,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
-                        period: 12,
+                        period: 13,
                     },
                 ],
             )
@@ -1015,22 +1015,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 3 },
+                    LayerStrappingParams::ViaDown { min_period: 2 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 2,
-                        period: 4,
+                        period: 5,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 8,
-                        period: 12,
+                        period: 11,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 8,
-                        period: 12,
+                        period: 9,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 8,
-                        period: 12,
+                        period: 13,
                     },
                 ],
             ),
@@ -1040,22 +1040,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 3 },
+                    LayerStrappingParams::ViaDown { min_period: 2 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 4,
+                        period: 5,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 12,
+                        period: 11,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 12,
+                        period: 9,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 12,
+                        period: 13,
                     },
                 ],
             ),
@@ -1065,22 +1065,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(
                 1,
                 vec![
-                    LayerStrappingParams::ViaDown { min_period: 3 },
+                    LayerStrappingParams::ViaDown { min_period: 2 },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
-                        period: 4,
+                        period: 5,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
-                        period: 12,
+                        period: 11,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
-                        period: 12,
+                        period: 9,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 1,
-                        period: 12,
+                        period: 13,
                     },
                 ],
             ),
