@@ -917,13 +917,13 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                         Dir::Horiz => (perp_tracks, tracks),
                         Dir::Vert => (tracks, perp_tracks),
                     };
-                    let bot_track = ytracks.to_track_idx(shape.bbox_rect().bot(), RoundingMode::Up);
-                    let top_track =
-                        ytracks.to_track_idx(shape.bbox_rect().top(), RoundingMode::Down);
+                    let bot_track =
+                        ytracks.to_track_idx(shape.bbox_rect().bot(), RoundingMode::Down);
+                    let top_track = ytracks.to_track_idx(shape.bbox_rect().top(), RoundingMode::Up);
                     let left_track =
-                        xtracks.to_track_idx(shape.bbox_rect().left(), RoundingMode::Up);
+                        xtracks.to_track_idx(shape.bbox_rect().left(), RoundingMode::Down);
                     let right_track =
-                        xtracks.to_track_idx(shape.bbox_rect().right(), RoundingMode::Down);
+                        xtracks.to_track_idx(shape.bbox_rect().right(), RoundingMode::Up);
                     let assigned_tracks =
                         Rect::from_sides(left_track, bot_track, right_track, top_track);
                     cell.assign_grid_points(None, layer, assigned_tracks);
