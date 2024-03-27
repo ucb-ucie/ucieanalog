@@ -176,9 +176,7 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     /// Creates an instance of the resistor tile.
     fn resistor(legs: i64, w: i64, l: i64, conn: ResistorConn) -> Self::ResistorTile;
     /// Creates a filler to be placed around the edge of the guard ring with height given in layer 1 tracks.
-    ///
-    /// Provides the side of the layout that the filler is located on.
-    fn filler(kind: TileKind, height: i64, side: Sign) -> Self::Filler;
+    fn filler(kind: TileKind, height: i64) -> Self::Filler;
     /// Returns the filler boundary layer ID.
     fn filler_boundary_id(layers: &PdkLayers<PDK>) -> LayerId;
     /// Creates a guard ring around the given number of horizontally-arrayed MOS devices,
@@ -865,7 +863,6 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 let filler = cell.layout.generate(T::filler(
                     kind,
                     bbox.height() / cell.layer_stack.layer(1).pitch(),
-                    sign,
                 ));
                 let layer_bbox = filler.layer_bbox(filler_id).unwrap();
                 let filler = filler
