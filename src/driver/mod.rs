@@ -17,7 +17,7 @@ use std::marker::PhantomData;
 use substrate::arcstr::ArcStr;
 use substrate::block::Block;
 use substrate::error::Result;
-use substrate::geometry::align::{AlignBbox, AlignMode, AlignRect};
+use substrate::geometry::align::{AlignMode, AlignRect};
 use substrate::geometry::bbox::Bbox;
 use substrate::geometry::corner::Corner;
 use substrate::geometry::dir::Dir;
