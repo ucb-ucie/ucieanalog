@@ -137,6 +137,8 @@ pub struct DriverParams {
     pub unit: DriverUnitParams,
     /// Number of segments.
     pub num_segments: usize,
+    /// Number of banks.
+    pub banks: usize,
 }
 
 /// A horizontal driver implementation.
@@ -547,7 +549,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         cell.set_router(GreedyRouter);
         cell.set_via_maker(T::via_maker());
 
-        // Route IOs to specific layer 2 tracks.
+        // Route `dout` to layer 3.
         let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
         let bbox = cell.layout.layer_bbox(virtual_layers.outline.id()).unwrap();
         let center_track_y = cell.layer_stack.layers[3]
@@ -580,6 +582,35 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         );
         cell.layout
             .draw(Shape::new(cell.layer_stack.layers[3].id, dout_rect))?;
+
+        // Route `pu_ctl` and `pd_ctl` to layer 2 at bottom of unit.
+        let bot_track_y = cell.layer_stack.layers[3]
+            .inner
+            .tracks()
+            .to_track_idx(bbox.bot(), RoundingMode::Up);
+        let left_track_x = cell.layer_stack.layers[2]
+            .inner
+            .tracks()
+            .to_track_idx(bbox.left(), RoundingMode::Up);
+
+        for (i, port) in [io.schematic.pu_ctl, io.schematic.pd_ctl]
+            .into_iter()
+            .enumerate()
+        {
+            let y_track_idx = bot_track_y + 1;
+            let x_track_idx = left_track_x + 1 + i as i64;
+            let y_track = cell.layer_stack.layers[3].inner.tracks().get(y_track_idx);
+            let x_track = cell.layer_stack.layers[2].inner.tracks().get(x_track_idx);
+            cell.layout.draw(Shape::new(
+                cell.layer_stack.layers[2].id,
+                Rect::from_spans(x_track, y_track),
+            ))?;
+            cell.assign_grid_points(
+                Some(port),
+                2,
+                Rect::from_point(Point::new(x_track_idx, y_track_idx)),
+            );
+        }
 
         io.layout.din.merge(nor_pd_data.layout.io().g);
         io.layout.dout.merge(pu_res.layout.io().p);
@@ -901,13 +932,14 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         }
         let mut dout = Vec::new();
         for unit in units.iter() {
+            let mut unit_dout = Vec::new();
             for (layer, shape) in &via_stack {
                 let shape = shape.clone().translate(
                     unit.layout.data().dout.bbox_rect().center() - shape.bbox_rect().center(),
                 );
                 cell.layout.draw(shape.clone())?;
-                if *layer == 7 {
-                    dout.push(shape.bbox_rect());
+                if shape.layer() == cell.layer_stack.layers[7].id {
+                    unit_dout.push(shape.bbox_rect());
                 }
 
                 for layer in [*layer, *layer - 1] {
@@ -929,6 +961,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     cell.assign_grid_points(None, layer, assigned_tracks);
                 }
             }
+            dout.push(unit_dout.bbox_rect());
         }
 
         let top_slice = cell.layer_stack.slice(0..8);
@@ -1158,8 +1191,8 @@ impl<T: Any> Block for HorizontalDriver<T> {
         DriverIo {
             din: Default::default(),
             dout: Default::default(),
-            pu_ctl: Array::new(self.0.num_segments, Default::default()),
-            pd_ctl: Array::new(self.0.num_segments, Default::default()),
+            pu_ctl: Array::new(self.0.num_segments * self.0.banks, Default::default()),
+            pd_ctl: Array::new(self.0.num_segments * self.0.banks, Default::default()),
             vdd: Default::default(),
             vss: Default::default(),
         }
@@ -1185,52 +1218,79 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
-        let driver = cell.generate(HorizontalDriverWithGuardRingRails::<T>::new(self.0));
-
-        let driver = cell.draw(driver)?;
-
-        cell.connect(driver.schematic.io().din, io.schematic.din);
-        cell.connect(driver.schematic.io().dout, io.schematic.dout);
-        cell.connect(driver.schematic.io().vdd, io.schematic.vdd);
-        cell.connect(driver.schematic.io().vss, io.schematic.vss);
-        cell.connect(driver.schematic.io().guard_ring_vdd, io.schematic.vdd);
-        cell.connect(driver.schematic.io().guard_ring_vss, io.schematic.vss);
-        io.layout.din.merge(driver.layout.io().din);
-        io.layout.dout.merge(driver.layout.io().dout);
-        io.layout.vdd.merge(driver.layout.io().vdd);
-        io.layout.vss.merge(driver.layout.io().vss);
-        for i in 0..self.0.num_segments {
-            cell.connect(driver.schematic.io().pu_ctl[i], io.schematic.pu_ctl[i]);
-            cell.connect(driver.schematic.io().pd_ctl[i], io.schematic.pd_ctl[i]);
-            io.layout.pu_ctl[i].merge(driver.layout.io().pu_ctl[i].clone());
-            io.layout.pd_ctl[i].merge(driver.layout.io().pd_ctl[i].clone());
-        }
-
-        let via_maker = T::via_maker();
-
-        let bump_rect = Rect::from_spans(
-            cell.layout.bbox_rect().hspan(),
-            Span::from_center_span(driver.layout.data().dout[0].center().y, 1080),
-        );
-        cell.layout
-            .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
-
-        let mut via_stack: Vec<(usize, Shape)> = Vec::new();
-        for layer in 8..10 {
-            via_stack.extend(
-                via_maker
-                    .draw_via(cell.ctx().clone(), TrackCoord { layer, x: 0, y: 0 })
-                    .into_iter()
-                    .map(|shape| (layer, shape)),
-            );
-        }
-        for dout in driver.layout.data().dout {
-            for (_layer, shape) in &via_stack {
-                let shape = shape
-                    .clone()
-                    .translate(dout.center() - shape.bbox_rect().center());
-                cell.layout.draw(shape.clone())?;
+        let mut layer8_vias = vec![Vec::new(); self.0.num_segments + 2];
+        let mut prev_bounds: Option<Rect> = None;
+        for i in 0..self.0.banks {
+            let mut driver = cell
+                .generate(HorizontalDriverWithGuardRingRails::<T>::new(self.0))
+                .orient(if i % 2 == 0 {
+                    Orientation::R0
+                } else {
+                    Orientation::ReflectVert
+                });
+            if let Some(prev_bounds) = prev_bounds {
+                driver.align_rect_mut(prev_bounds, AlignMode::Above, 1);
             }
+            prev_bounds = Some(driver.lcm_bounds());
+
+            let driver = cell.draw(driver)?;
+
+            cell.connect(driver.schematic.io().din, io.schematic.din);
+            cell.connect(driver.schematic.io().dout, io.schematic.dout);
+            cell.connect(driver.schematic.io().vdd, io.schematic.vdd);
+            cell.connect(driver.schematic.io().vss, io.schematic.vss);
+            cell.connect(driver.schematic.io().guard_ring_vdd, io.schematic.vdd);
+            cell.connect(driver.schematic.io().guard_ring_vss, io.schematic.vss);
+            io.layout.din.merge(driver.layout.io().din);
+            io.layout.dout.merge(driver.layout.io().dout);
+            io.layout.vdd.merge(driver.layout.io().vdd);
+            io.layout.vss.merge(driver.layout.io().vss);
+            for j in 0..self.0.num_segments {
+                cell.connect(
+                    driver.schematic.io().pu_ctl[j],
+                    io.schematic.pu_ctl[self.0.num_segments * i + j],
+                );
+                cell.connect(
+                    driver.schematic.io().pd_ctl[j],
+                    io.schematic.pd_ctl[self.0.num_segments * i + j],
+                );
+                io.layout.pu_ctl[self.0.num_segments * i + j]
+                    .merge(driver.layout.io().pu_ctl[j].clone());
+                io.layout.pd_ctl[self.0.num_segments * i + j]
+                    .merge(driver.layout.io().pd_ctl[j].clone());
+            }
+
+            let via_maker = T::via_maker();
+
+            let bump_rect = Rect::from_spans(
+                cell.layout.bbox_rect().hspan(),
+                Span::from_center_span(driver.layout.data().dout[0].center().y, 1080),
+            );
+            cell.layout
+                .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
+
+            let mut via_stack = Vec::new();
+            for layer in 8..10 {
+                via_stack.extend(
+                    via_maker.draw_via(cell.ctx().clone(), TrackCoord { layer, x: 0, y: 0 }),
+                );
+            }
+            for (j, dout) in driver.layout.data().dout.into_iter().enumerate() {
+                for shape in &via_stack {
+                    let shape = shape
+                        .clone()
+                        .translate(dout.center() - shape.bbox_rect().center());
+                    if shape.layer() == cell.layer_stack.layers[8].id {
+                        layer8_vias[j].push(shape.bbox_rect());
+                    }
+                    cell.layout.draw(shape.clone())?;
+                }
+            }
+        }
+
+        for vias in layer8_vias {
+            cell.layout
+                .draw(Shape::new(cell.layer_stack.layers[8].id, vias.bbox_rect()))?;
         }
 
         cell.set_strapping(
