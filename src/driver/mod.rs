@@ -299,15 +299,22 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
     )> {
         let nf = T::nf(self.0.res_legs, self.0.res_w);
 
+        // Intermediate nodes in the NOR/NAND gates.
         let nor_x = cell.signal("nor_x", Signal::new());
         let nand_x = cell.signal("nand_x", Signal::new());
+
+        // Signals to gates of pull-up and pull-down transistors.
         let pd_en = cell.signal("pd_en", Signal::new());
         let pu_en = cell.signal("pu_en", Signal::new());
+
+        // Intermediate signals between pull-up/pull-down transistors and resistors.
         let pd_x = cell.signal("pd_x", Signal::new());
         let pu_x = cell.signal("pu_x", Signal::new());
 
+        // Choose width per finger based on provided width parameter and number of fingers.
         let mos = |kind, w| T::mos(kind, nf, (w - 1) / nf + 1);
 
+        // Instantiate all transistors.
         let mut nor_pu_en = cell
             .generate_connected(
                 mos(TileKind::P, self.0.nor_pu_en_w),
@@ -437,6 +444,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             },
         );
 
+        // Instantiate all taps.
         let mut ntap_nor = cell.generate(T::tap(TileKind::N, nf));
         let mut ptap_nor = cell.generate(T::tap(TileKind::P, nf));
         let mut ptap_driver_bot = cell.generate(T::tap(TileKind::P, nf));
@@ -452,6 +460,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             cell.connect(tap.io().x, io.schematic.vss);
         }
 
+        // Place NAND gate.
         nand_pd_en.align_mut(&ptap_nand, AlignMode::Left, 0);
         nand_pd_en.align_mut(&ptap_nand, AlignMode::Beneath, 0);
         nand_pd_data.align_mut(&nand_pd_en, AlignMode::Left, 0);
@@ -463,6 +472,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         ntap_nand.align_mut(&nand_pu_en, AlignMode::Left, 0);
         ntap_nand.align_mut(&nand_pu_en, AlignMode::Beneath, 0);
 
+        // Place pull-up transistor and taps.
         ntap_driver_top.align_mut(&ntap_nand, AlignMode::Left, 0);
         ntap_driver_top.align_mut(
             &ntap_nand,
@@ -474,16 +484,17 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         ntap_driver_bot.align_mut(&driver_pu, AlignMode::Left, 0);
         ntap_driver_bot.align_mut(&driver_pu, AlignMode::Beneath, 0);
 
+        // Place resistors.
         pu_res.align_mut(&ntap_driver_bot, AlignMode::Left, 0);
         pu_res.align_mut(
             &ntap_driver_bot,
             AlignMode::Beneath,
             -T::GUARD_RING_ANNULAR_HEIGHT,
         );
-
         pd_res.align_mut(&pu_res, AlignMode::Left, 0);
         pd_res.align_mut(&pu_res, AlignMode::Beneath, 0);
 
+        // Place pull-down transistor.
         ptap_driver_top.align_mut(&pd_res, AlignMode::Left, 0);
         ptap_driver_top.align_mut(&pd_res, AlignMode::Beneath, -T::GUARD_RING_ANNULAR_HEIGHT);
         driver_pd.align_mut(&ptap_driver_top, AlignMode::Left, 0);
@@ -491,6 +502,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         ptap_driver_bot.align_mut(&driver_pd, AlignMode::Left, 0);
         ptap_driver_bot.align_mut(&driver_pd, AlignMode::Beneath, 0);
 
+        // Place NOR gate.
         ptap_nor.align_mut(&ptap_driver_bot, AlignMode::Left, 0);
         ptap_nor.align_mut(
             &ptap_driver_bot,
@@ -508,6 +520,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         ntap_nor.align_mut(&nor_pu_en, AlignMode::Left, 0);
         ntap_nor.align_mut(&nor_pu_en, AlignMode::Beneath, 0);
 
+        // Block layer 0 where guard ring will be present.
         for (top, bot) in [
             (ntap_nand.lcm_bounds(), ntap_driver_top.lcm_bounds()),
             (ntap_driver_bot.lcm_bounds(), pu_res.lcm_bounds()),
@@ -521,6 +534,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             );
         }
 
+        // Draw transistors.
         let nor_pd_en = cell.draw(nor_pd_en)?;
         let nor_pd_data = cell.draw(nor_pd_data)?;
         let _nor_pu_en = cell.draw(nor_pu_en)?;
@@ -534,6 +548,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let _nand_pu_en = cell.draw(nand_pu_en)?;
         let nand_pu_data = cell.draw(nand_pu_data)?;
 
+        // Draw taps.
         let ntap_nor = cell.draw(ntap_nor)?;
         let ptap_nor = cell.draw(ptap_nor)?;
         let ptap_driver_top = cell.draw(ptap_driver_top)?;
@@ -558,7 +573,6 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .inner
             .tracks()
             .to_track_idx(bbox.center().x, RoundingMode::Nearest);
-
         let dout_rect = Rect::from_spans(
             cell.layer_stack.layers[2]
                 .inner
@@ -569,7 +583,6 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 .tracks()
                 .get(center_track_y),
         );
-
         cell.assign_grid_points(
             Some(io.schematic.dout),
             3,
@@ -617,6 +630,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         io.layout.vdd.merge(ntap_driver_top.layout.io().x);
         io.layout.vss.merge(ptap_driver_bot.layout.io().x);
 
+        // Route these signals by straps at a higher level in the hierarchy.
         cell.skip_routing_all(io.schematic.vss);
         cell.skip_routing_all(io.schematic.vdd);
         cell.skip_routing_all(io.schematic.din);
@@ -669,7 +683,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
     }
 }
 
-/// A horizontal driver.
+/// A horizontal driver with separated guard ring rails.
 #[derive_where::derive_where(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(Serialize, Deserialize)]
 pub struct HorizontalDriverWithGuardRingRails<T>(
@@ -737,6 +751,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         <Self as ExportsLayoutData>::LayoutData,
     )> {
         let mut units = Vec::new();
+        // Instantiate driver units.
         for i in 0..self.0.num_segments + 2 {
             let mut unit = cell.generate_connected(
                 HorizontalDriverUnit::<T>::new(self.0.unit),
@@ -764,6 +779,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             units.push(unit);
         }
 
+        // Draw driver units.
         let units = units
             .into_iter()
             .enumerate()
@@ -781,8 +797,10 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             })
             .collect::<Result<Vec<_>>>()?;
 
+        // Fill in extra dummies and taps for continuous diffusion for pull-up/pull-down transistors.
         let nf = T::nf(self.0.unit.res_legs, self.0.unit.res_w);
         for unit in units.iter().take(self.0.num_segments + 1) {
+            // Draw dummy transistors.
             let pu_bbox = unit.layout.data().driver_pu_bbox;
             let pu_loc = cell
                 .layer_stack
@@ -808,10 +826,10 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 )
                 .align_rect(pd_loc, AlignMode::CenterVertical, 0)
                 .align_rect(pd_loc, AlignMode::CenterHorizontal, 0);
-
             let _dummy_pu = cell.draw(dummy_pu)?;
             let _dummy_pd = cell.draw(dummy_pd)?;
 
+            // Draw additional taps.
             for (tap_bbox, kind, node) in unit
                 .layout
                 .data()
@@ -840,6 +858,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             }
         }
 
+        // Add filler on the left and right of layout to account for guard ring.
         for sign in [Sign::Neg, Sign::Pos] {
             let unit = &units[match sign {
                 Sign::Neg => 0,
@@ -891,6 +910,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .driver_pd_bbox
             .union(units[self.0.num_segments + 1].layout.data().driver_pd_bbox);
 
+        // Draw pull-up and pull-down guard rings.
         let mut guard_rings = Vec::new();
         for (bbox, kind, node) in [
             (pu_bbox, TileKind::P, io.schematic.guard_ring_vss),
@@ -918,6 +938,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
 
         let via_maker = T::via_maker();
 
+        // Via up `dout` to layer 7.
         let mut via_stack: Vec<(usize, Shape)> = Vec::new();
         for layer in 4..8 {
             via_stack.extend(
@@ -930,6 +951,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let mut dout = Vec::new();
         for unit in units.iter() {
             let mut unit_dout = Vec::new();
+            // Draw vias.
             for (layer, shape) in &via_stack {
                 let shape = shape.clone().translate(
                     unit.layout.data().dout.bbox_rect().center() - shape.bbox_rect().center(),
@@ -939,6 +961,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     unit_dout.push(shape.bbox_rect());
                 }
 
+                // Block ample space for each via in the ATOLL routing grid.
                 for layer in [*layer, *layer - 1] {
                     let tracks = cell.layer_stack.tracks(layer);
                     let perp_tracks = cell.layer_stack.tracks(layer - 1);
@@ -961,6 +984,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             dout.push(unit_dout.bbox_rect());
         }
 
+        // Determine strapping domains.
         let top_slice = cell.layer_stack.slice(0..8);
         let overall_bbox = top_slice.expand_to_lcm_units(cell.layout.bbox_rect());
         let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
@@ -998,6 +1022,8 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     .add_point(cell.layout.bbox_rect().bot()),
             ))
             .translate(Point::zero() - overall_bbox.corner(Corner::LowerLeft));
+
+        // Strap guard ring rails only over the appropriate rings.
         cell.set_strapping(
             io.schematic.guard_ring_vss,
             StrappingParams::new(
@@ -1051,6 +1077,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .with_bounds(guard_ring_n_bbox),
         );
 
+        // Strap `din`.
         cell.set_strapping(
             io.schematic.din,
             StrappingParams::new(
@@ -1076,6 +1103,8 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 ],
             ),
         );
+
+        // Strap VSS with high density on layer 1 over the pull-up/pull-down networks.
         cell.set_strapping(
             io.schematic.vss,
             StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
@@ -1086,6 +1115,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
                 .with_bounds(pd_network_bbox),
         );
+        // Strap VSS over the entire driver.
         cell.set_strapping(
             io.schematic.vss,
             StrappingParams::new(
@@ -1111,6 +1141,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 ],
             ),
         );
+        // Strap VDD with high density on layer 1 over the pull-up/pull-down networks.
         cell.set_strapping(
             io.schematic.vdd,
             StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
@@ -1121,6 +1152,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             StrappingParams::new(1, vec![LayerStrappingParams::ViaDown { min_period: 1 }])
                 .with_bounds(pd_network_bbox),
         );
+        // Strap VDD over the entire driver.
         cell.set_strapping(
             io.schematic.vdd,
             StrappingParams::new(
@@ -1217,6 +1249,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
     )> {
         let mut layer8_vias = vec![Vec::new(); self.0.num_segments + 2];
         let mut prev_bounds: Option<Rect> = None;
+        // Instantiate and draw banks.
         for i in 0..self.0.banks {
             let mut driver = cell
                 .generate(HorizontalDriverWithGuardRingRails::<T>::new(self.0))
@@ -1257,15 +1290,14 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     .merge(driver.layout.io().pd_ctl[j].clone());
             }
 
+            // Via up `dout` nets from each unit to layer 9 and draw a rectangle connecting them all.
             let via_maker = T::via_maker();
-
             let bump_rect = Rect::from_spans(
                 cell.layout.bbox_rect().hspan(),
                 Span::from_center_span(driver.layout.data().dout[0].center().y, 1080),
             );
             cell.layout
                 .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
-
             let mut via_stack = Vec::new();
             for layer in 8..10 {
                 via_stack.extend(
@@ -1277,6 +1309,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     let shape = shape
                         .clone()
                         .translate(dout.center() - shape.bbox_rect().center());
+                    // Track layer 8 vias to strap with other banks.
                     if shape.layer() == cell.layer_stack.layers[8].id {
                         layer8_vias[j].push(shape.bbox_rect());
                     }
@@ -1285,11 +1318,13 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             }
         }
 
+        // Strap `dout` across banks.
         for vias in layer8_vias {
             cell.layout
                 .draw(Shape::new(cell.layer_stack.layers[8].id, vias.bbox_rect()))?;
         }
 
+        // Strap `din`, `vss`, and `vdd`.
         cell.set_strapping(
             io.schematic.din,
             StrappingParams::new(
