@@ -1036,7 +1036,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 3,
+                        period: 7,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
@@ -1062,7 +1062,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 0,
-                        period: 3,
+                        period: 7,
                     },
                     LayerStrappingParams::OffsetPeriod {
                         offset: 5,
