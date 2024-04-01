@@ -120,7 +120,7 @@ impl Tile<Sky130Pdk> for TwoFingerMosTile {
         }
 
         cell.set_top_layer(1);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(Sky130ViaMaker);
 
         Ok(((), ()))
@@ -199,7 +199,7 @@ impl Tile<Sky130Pdk> for TapTile {
                 io.layout.x.merge(inst.layout.io().vnb);
             }
         }
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         Ok(((), ()))
     }
 }
