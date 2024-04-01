@@ -559,7 +559,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let ptap_nand = cell.draw(ptap_nand)?;
 
         cell.set_top_layer(3);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::with_seed([1; 32]));
         cell.set_via_maker(T::via_maker());
 
         // Route `dout` to layer 3.
@@ -1726,7 +1726,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
             .push(IoShape::with_layers(T::pin(&cell.ctx().layers), track_rect));
 
         cell.set_top_layer(2);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(T::via_maker());
 
         io.layout.pu_ctl.merge(nor_pd_en.layout.io().g);
@@ -1880,8 +1880,6 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for 
         }
 
         cell.set_top_layer(3);
-        // cell.set_router(GreedyRouter);
-        // cell.set_via_maker(T::via_maker());
 
         T::post_layout_hooks(cell)?;
 

@@ -154,7 +154,7 @@ impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Invert
         let ntap = cell.draw(ntap)?;
 
         cell.set_top_layer(1);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(T::via_maker());
 
         io.layout.din.merge(nmos.layout.io().g);
@@ -246,7 +246,7 @@ impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Buffer
         let inv2 = cell.draw(inv2)?;
 
         cell.set_top_layer(1);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(T::via_maker());
 
         io.layout.vdd.merge(inv1.layout.io().vdd);

@@ -401,7 +401,7 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmImpl<PDK> + Any> Tile<PDK> for Stron
         let _precharge_pair_b_dummy = cell.draw(precharge_pair_b_dummy)?;
 
         cell.set_top_layer(2);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(T::via_maker());
 
         io.layout.top_io.vdd.set_primary(ntap.layout.io().x.primary);
@@ -496,7 +496,7 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmImpl<PDK> + Any> Tile<PDK> for Stron
         let right_half = cell.draw(right_half)?;
 
         cell.set_top_layer(2);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(T::via_maker());
 
         io.layout.vdd.merge(left_half.layout.io().top_io.vdd);
@@ -655,7 +655,7 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmWithOutputBuffersImpl<PDK> + Any> Ti
         let left_buf = cell.draw(left_buf)?;
 
         cell.set_top_layer(2);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(<T as StrongArmImpl<PDK>>::via_maker());
 
         io.layout.vdd.merge(strongarm.layout.io().vdd);
