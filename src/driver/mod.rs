@@ -764,7 +764,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                         io.schematic.pu_ctl[i - 1]
                     },
                     pd_ctlb: if i == 0 || i == self.0.num_segments + 1 {
-                        io.schematic.vss
+                        io.schematic.vdd
                     } else {
                         io.schematic.pd_ctlb[i - 1]
                     },
