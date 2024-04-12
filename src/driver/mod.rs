@@ -47,8 +47,8 @@ pub struct DriverUnitIo {
     pub dout: Output<Signal>,
     /// The pull-up control.
     pub pu_ctl: Input<Signal>,
-    /// The pull-down control.
-    pub pd_ctl: Input<Signal>,
+    /// The pull-down control (inverted).
+    pub pd_ctlb: Input<Signal>,
     /// The VDD rail.
     pub vdd: InOut<Signal>,
     /// The VSS rail.
@@ -101,8 +101,8 @@ pub struct DriverWithGuardRingRailsIo {
     pub dout: Output<Signal>,
     /// The pull-up control.
     pub pu_ctl: Array<Input<Signal>>,
-    /// The pull-down control.
-    pub pd_ctl: Array<Input<Signal>>,
+    /// The pull-down control (inverted).
+    pub pd_ctlb: Array<Input<Signal>>,
     /// The VDD rail.
     pub vdd: InOut<Signal>,
     /// The VSS rail.
@@ -122,8 +122,8 @@ pub struct DriverIo {
     pub dout: Output<Signal>,
     /// The pull-up control.
     pub pu_ctl: Array<Input<Signal>>,
-    /// The pull-down control.
-    pub pd_ctl: Array<Input<Signal>>,
+    /// The pull-down control (inverted).
+    pub pd_ctlb: Array<Input<Signal>>,
     /// The VDD rail.
     pub vdd: InOut<Signal>,
     /// The VSS rail.
@@ -320,7 +320,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 mos(TileKind::P, self.0.nor_pu_en_w),
                 MosIoSchematic {
                     d: io.schematic.vdd,
-                    g: io.schematic.pd_ctl,
+                    g: io.schematic.pd_ctlb,
                     s: nor_x,
                     b: io.schematic.vdd,
                 },
@@ -341,7 +341,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             mos(TileKind::N, self.0.nor_pd_en_w),
             MosIoSchematic {
                 d: pd_en,
-                g: io.schematic.pd_ctl,
+                g: io.schematic.pd_ctlb,
                 s: io.schematic.vss,
                 b: io.schematic.vss,
             },
@@ -594,7 +594,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         cell.layout
             .draw(Shape::new(cell.layer_stack.layers[3].id, dout_rect))?;
 
-        // Route `pu_ctl` and `pd_ctl` to layer 2 at bottom of unit.
+        // Route `pu_ctl` and `pd_ctlb` to layer 2 at bottom of unit.
         let bot_track_y = cell.layer_stack.layers[3]
             .inner
             .tracks()
@@ -604,7 +604,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .tracks()
             .to_track_idx(bbox.left(), RoundingMode::Up);
 
-        for (i, port) in [io.schematic.pu_ctl, io.schematic.pd_ctl]
+        for (i, port) in [io.schematic.pu_ctl, io.schematic.pd_ctlb]
             .into_iter()
             .enumerate()
         {
@@ -626,7 +626,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         io.layout.din.merge(nor_pd_data.layout.io().g);
         io.layout.dout.merge(pu_res.layout.io().p);
         io.layout.pu_ctl.merge(nand_pd_en.layout.io().g);
-        io.layout.pd_ctl.merge(nor_pd_en.layout.io().g);
+        io.layout.pd_ctlb.merge(nor_pd_en.layout.io().g);
         io.layout.vdd.merge(ntap_driver_top.layout.io().x);
         io.layout.vss.merge(ptap_driver_bot.layout.io().x);
 
@@ -715,7 +715,7 @@ impl<T: Any> Block for HorizontalDriverWithGuardRingRails<T> {
             din: Default::default(),
             dout: Default::default(),
             pu_ctl: Array::new(self.0.num_segments, Default::default()),
-            pd_ctl: Array::new(self.0.num_segments, Default::default()),
+            pd_ctlb: Array::new(self.0.num_segments, Default::default()),
             vdd: Default::default(),
             vss: Default::default(),
             guard_ring_vdd: Default::default(),
@@ -763,10 +763,10 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     } else {
                         io.schematic.pu_ctl[i - 1]
                     },
-                    pd_ctl: if i == 0 || i == self.0.num_segments + 1 {
-                        io.schematic.vss
+                    pd_ctlb: if i == 0 || i == self.0.num_segments + 1 {
+                        io.schematic.vdd
                     } else {
-                        io.schematic.pd_ctl[i - 1]
+                        io.schematic.pd_ctlb[i - 1]
                     },
                     vdd: io.schematic.vdd,
                     vss: io.schematic.vss,
@@ -789,7 +789,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 io.layout.dout.merge(unit.layout.io().dout);
                 if i > 0 && i < self.0.num_segments + 1 {
                     io.layout.pu_ctl[i - 1].merge(unit.layout.io().pu_ctl);
-                    io.layout.pd_ctl[i - 1].merge(unit.layout.io().pd_ctl);
+                    io.layout.pd_ctlb[i - 1].merge(unit.layout.io().pd_ctlb);
                 }
                 io.layout.vdd.merge(unit.layout.io().vdd);
                 io.layout.vss.merge(unit.layout.io().vss);
@@ -1221,7 +1221,7 @@ impl<T: Any> Block for HorizontalDriver<T> {
             din: Default::default(),
             dout: Default::default(),
             pu_ctl: Array::new(self.0.num_segments * self.0.banks, Default::default()),
-            pd_ctl: Array::new(self.0.num_segments * self.0.banks, Default::default()),
+            pd_ctlb: Array::new(self.0.num_segments * self.0.banks, Default::default()),
             vdd: Default::default(),
             vss: Default::default(),
         }
@@ -1281,13 +1281,13 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     io.schematic.pu_ctl[self.0.num_segments * i + j],
                 );
                 cell.connect(
-                    driver.schematic.io().pd_ctl[j],
-                    io.schematic.pd_ctl[self.0.num_segments * i + j],
+                    driver.schematic.io().pd_ctlb[j],
+                    io.schematic.pd_ctlb[self.0.num_segments * i + j],
                 );
                 io.layout.pu_ctl[self.0.num_segments * i + j]
                     .merge(driver.layout.io().pu_ctl[j].clone());
-                io.layout.pd_ctl[self.0.num_segments * i + j]
-                    .merge(driver.layout.io().pd_ctl[j].clone());
+                io.layout.pd_ctlb[self.0.num_segments * i + j]
+                    .merge(driver.layout.io().pd_ctlb[j].clone());
             }
 
             // Via up `dout` nets from each unit to layer 9 and draw a rectangle connecting them all.
@@ -1459,7 +1459,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
             T::mos(nor_pu_en_params),
             MosIoSchematic {
                 d: io.schematic.vdd,
-                g: io.schematic.pd_ctl,
+                g: io.schematic.pd_ctlb,
                 s: nor_x,
                 b: io.schematic.vdd,
             },
@@ -1549,7 +1549,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
             T::mos(nand_pd_en_params),
             MosIoSchematic {
                 d: io.schematic.vss,
-                g: io.schematic.pd_ctl,
+                g: io.schematic.pd_ctlb,
                 s: nand_x,
                 b: io.schematic.vss,
             },
@@ -1730,7 +1730,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
         cell.set_via_maker(T::via_maker());
 
         io.layout.pu_ctl.merge(nor_pd_en.layout.io().g);
-        io.layout.pd_ctl.merge(nand_pd_en.layout.io().g);
+        io.layout.pd_ctlb.merge(nand_pd_en.layout.io().g);
         io.layout.vdd.merge(ntap.layout.io().x);
         io.layout.vss.merge(ptap.layout.io().x);
 
@@ -1772,7 +1772,7 @@ impl<T: Any> Block for VerticalDriver<T> {
             din: Default::default(),
             dout: Default::default(),
             pu_ctl: Array::new(self.0.num_segments, Default::default()),
-            pd_ctl: Array::new(self.0.num_segments, Default::default()),
+            pd_ctlb: Array::new(self.0.num_segments, Default::default()),
             vdd: Default::default(),
             vss: Default::default(),
         }
@@ -1804,7 +1804,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for 
                     din: io.schematic.din,
                     dout: io.schematic.dout,
                     pu_ctl: io.schematic.pu_ctl[i],
-                    pd_ctl: io.schematic.pd_ctl[i],
+                    pd_ctlb: io.schematic.pd_ctlb[i],
                     vdd: io.schematic.vdd,
                     vss: io.schematic.vss,
                 },
@@ -1824,7 +1824,7 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK> for 
                 io.layout.din.merge(unit.layout.io().din);
                 io.layout.dout.merge(unit.layout.io().dout);
                 io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
-                io.layout.pd_ctl[i].merge(unit.layout.io().pd_ctl);
+                io.layout.pd_ctlb[i].merge(unit.layout.io().pd_ctlb);
                 io.layout.vdd.merge(unit.layout.io().vdd);
                 io.layout.vss.merge(unit.layout.io().vss);
                 Ok(unit)
