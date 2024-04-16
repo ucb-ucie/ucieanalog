@@ -542,8 +542,8 @@ impl StrongArmHighSpeedTbOutput {
     pub fn is_correct(&self) -> bool {
         for (i, item) in self.decisions.iter().enumerate() {
             if let Some(item) = *item {
-                if (i % 2 == 0 && item != ComparatorDecision::Neg)
-                    || (i % 2 != 0 && item != ComparatorDecision::Pos)
+                if (i % 2 == 0 && item != ComparatorDecision::Pos)
+                    || (i % 2 != 0 && item != ComparatorDecision::Neg)
                 {
                     return false;
                 }
