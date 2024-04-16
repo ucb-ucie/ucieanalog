@@ -507,9 +507,14 @@ where
         let vop = WaveformRef::new(&wav.t, &wav.vop);
         let clk = WaveformRef::new(&wav.t, &wav.clk);
         let vdd = self.params.pvt.voltage.to_f64().unwrap();
+        let (clk_thresh, edge_dir) = if self.params.inverted_clk {
+            (0.2, EdgeDir::Rising)
+        } else {
+            (0.8, EdgeDir::Falling)
+        };
         let decisions = clk
-            .edges(0.8 * vdd)
-            .filter(|e| e.dir() == EdgeDir::Falling)
+            .edges(clk_thresh * vdd)
+            .filter(|e| e.dir() == edge_dir)
             .map(|edge| {
                 let t = edge.t();
                 let von = von.sample_at(t);
