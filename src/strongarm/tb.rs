@@ -390,7 +390,7 @@ where
         let vvinp = cell.instantiate(Vsource::pulse(Pulse {
             val0: self.params.v0.0,
             val1: self.params.v1.0,
-            period: Some(self.params.period),
+            period: Some(self.params.period * dec!(2)),
             rise: Some(self.params.tr),
             fall: Some(self.params.tf),
             width: None,
@@ -399,7 +399,7 @@ where
         let vvinn = cell.instantiate(Vsource::pulse(Pulse {
             val0: self.params.v0.1,
             val1: self.params.v1.1,
-            period: Some(self.params.period),
+            period: Some(self.params.period * dec!(2)),
             rise: Some(self.params.tr),
             fall: Some(self.params.tf),
             width: None,
