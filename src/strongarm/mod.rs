@@ -438,7 +438,7 @@ pub struct StrongArm<T>(
 
 impl<T> StrongArm<T> {
     /// Creates a new [`StrongArm`].
-    pub fn new(params: StrongArmParams) -> Self {
+    pub const fn new(params: StrongArmParams) -> Self {
         Self(params, PhantomData)
     }
 }
@@ -569,7 +569,7 @@ pub struct StrongArmWithOutputBuffers<T>(
 
 impl<T> StrongArmWithOutputBuffers<T> {
     /// Creates a new [`StrongArmWithOutputBuffers`].
-    pub fn new(sa_params: StrongArmParams, buf_params: InverterParams) -> Self {
+    pub const fn new(sa_params: StrongArmParams, buf_params: InverterParams) -> Self {
         Self(sa_params, buf_params, PhantomData)
     }
 }
