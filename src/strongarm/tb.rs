@@ -23,7 +23,7 @@ use substrate::schematic::schema::Schema;
 use substrate::schematic::{Cell, CellBuilder, ExportsNestedData, NestedData, Schematic};
 use substrate::scir::schema::FromSchema;
 use substrate::simulation::data::{tran, FromSaved, Save, SaveTb};
-use substrate::simulation::options::SimOption;
+use substrate::simulation::options::{SimOption, Temperature};
 use substrate::simulation::waveform::{EdgeDir, TimeWaveform, WaveformRef};
 use substrate::simulation::{SimController, SimulationContext, Simulator, Testbench};
 
@@ -240,6 +240,7 @@ where
     fn run(&self, sim: SimController<Spectre, Self>) -> Self::Output {
         let mut opts = spectre::Options::default();
         sim.set_option(self.pvt.corner, &mut opts);
+        sim.set_option(Temperature::from(self.pvt.temp), &mut opts);
         let wav: ComparatorSim = sim
             .simulate(
                 opts,
