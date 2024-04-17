@@ -32,7 +32,9 @@ pub struct BufferIo {
 /// The parameters of the [`Inverter`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct InverterParams {
+    /// The NMOS device flavor.
     pub nmos_kind: MosKind,
+    /// The PMOS device flavor.
     pub pmos_kind: MosKind,
     /// The width of the NMOS.
     pub nmos_w: i64,

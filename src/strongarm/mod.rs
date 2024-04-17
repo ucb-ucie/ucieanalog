@@ -1,6 +1,6 @@
 //! StrongARM latch layout generators.
 
-use crate::buffer::{Buffer, BufferIoSchematic, Inverter, InverterImpl, InverterParams};
+use crate::buffer::{BufferIoSchematic, Inverter, InverterImpl, InverterParams};
 use crate::tiles::{MosKind, MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
