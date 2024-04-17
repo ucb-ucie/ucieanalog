@@ -1,7 +1,7 @@
 //! StrongARM latch layout generators.
 
-use crate::buffer::{Buffer, BufferIoSchematic, InverterImpl, InverterParams};
-use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
+use crate::buffer::{Buffer, BufferIoSchematic, Inverter, InverterImpl, InverterParams};
+use crate::tiles::{MosKind, MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,10 @@ impl InputKind {
 /// The parameters of the [`StrongArm`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct StrongArmParams {
+    /// The NMOS device flavor.
+    pub nmos_kind: MosKind,
+    /// The PMOS device flavor.
+    pub pmos_kind: MosKind,
     /// The width of one half of the tail MOS device.
     pub half_tail_w: i64,
     /// The width of an input pair MOS device.
@@ -150,25 +154,38 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmImpl<PDK> + Any> Tile<PDK> for Stron
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
-        let (input_kind, precharge_kind, input_rail, precharge_rail) = match self.0.input_kind {
+        let (
+            input_kind,
+            precharge_kind,
+            input_flavor,
+            precharge_flavor,
+            input_rail,
+            precharge_rail,
+        ) = match self.0.input_kind {
             InputKind::N => (
                 TileKind::N,
                 TileKind::P,
+                self.0.nmos_kind,
+                self.0.pmos_kind,
                 io.schematic.top_io.vss,
                 io.schematic.top_io.vdd,
             ),
             InputKind::P => (
                 TileKind::P,
                 TileKind::N,
+                self.0.pmos_kind,
+                self.0.nmos_kind,
                 io.schematic.top_io.vdd,
                 io.schematic.top_io.vss,
             ),
         };
-        let half_tail_params = MosTileParams::new(input_kind, self.0.half_tail_w);
-        let input_pair_params = MosTileParams::new(input_kind, self.0.input_pair_w);
-        let inv_input_params = MosTileParams::new(input_kind, self.0.inv_input_w);
-        let inv_precharge_params = MosTileParams::new(precharge_kind, self.0.inv_precharge_w);
-        let precharge_params = MosTileParams::new(precharge_kind, self.0.precharge_w);
+        let half_tail_params = MosTileParams::new(input_flavor, input_kind, self.0.half_tail_w);
+        let input_pair_params = MosTileParams::new(input_flavor, input_kind, self.0.input_pair_w);
+        let inv_input_params = MosTileParams::new(input_flavor, input_kind, self.0.inv_input_w);
+        let inv_precharge_params =
+            MosTileParams::new(precharge_flavor, precharge_kind, self.0.inv_precharge_w);
+        let precharge_params =
+            MosTileParams::new(precharge_flavor, precharge_kind, self.0.precharge_w);
 
         let tail = io.schematic.tail_d;
         let intn = io.schematic.input_d.n;
@@ -625,10 +642,10 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmWithOutputBuffersImpl<PDK> + Any> Ti
 
         let right_buf = cell
             .generate_connected(
-                Buffer::<T>::new(self.1),
+                Inverter::<T>::new(self.1),
                 BufferIoSchematic {
                     din: out.p,
-                    dout: io.schematic.output.p,
+                    dout: io.schematic.output.n,
                     vdd: io.schematic.vdd,
                     vss: io.schematic.vss,
                 },
@@ -638,10 +655,10 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmWithOutputBuffersImpl<PDK> + Any> Ti
 
         let left_buf = cell
             .generate_connected(
-                Buffer::<T>::new(self.1),
+                Inverter::<T>::new(self.1),
                 BufferIoSchematic {
                     din: out.n,
-                    dout: io.schematic.output.n,
+                    dout: io.schematic.output.p,
                     vdd: io.schematic.vdd,
                     vss: io.schematic.vss,
                 },
@@ -663,8 +680,8 @@ impl<PDK: Pdk + Schema + Sized, T: StrongArmWithOutputBuffersImpl<PDK> + Any> Ti
         io.layout.clock.merge(strongarm.layout.io().clock);
         io.layout.input.p.merge(strongarm.layout.io().input.p);
         io.layout.input.n.merge(strongarm.layout.io().input.n);
-        io.layout.output.p.merge(right_buf.layout.io().dout);
-        io.layout.output.n.merge(left_buf.layout.io().dout);
+        io.layout.output.p.merge(left_buf.layout.io().dout);
+        io.layout.output.n.merge(right_buf.layout.io().dout);
 
         <T as StrongArmWithOutputBuffersImpl<PDK>>::post_layout_hooks(cell)?;
 

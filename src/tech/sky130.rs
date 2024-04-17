@@ -24,7 +24,7 @@ impl StrongArmImpl<Sky130Pdk> for Sky130Ucie {
     type ViaMaker = Sky130ViaMaker;
 
     fn mos(params: MosTileParams) -> Self::MosTile {
-        TwoFingerMosTile::new(params.w, MosLength::L150, params.kind)
+        TwoFingerMosTile::new(params.w, MosLength::L150, params.tile_kind)
     }
     fn tap(params: TapTileParams) -> Self::TapTile {
         TapTile::new(params)
@@ -40,7 +40,7 @@ impl InverterImpl<Sky130Pdk> for Sky130Ucie {
     type ViaMaker = Sky130ViaMaker;
 
     fn mos(params: MosTileParams) -> Self::MosTile {
-        TwoFingerMosTile::new(params.w, MosLength::L150, params.kind)
+        TwoFingerMosTile::new(params.w, MosLength::L150, params.tile_kind)
     }
     fn tap(params: TapTileParams) -> Self::TapTile {
         TapTile::new(params)

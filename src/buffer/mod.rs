@@ -1,6 +1,6 @@
 //! Buffer layout generators.
 
-use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
+use crate::tiles::{MosKind, MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
@@ -32,6 +32,8 @@ pub struct BufferIo {
 /// The parameters of the [`Inverter`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct InverterParams {
+    pub nmos_kind: MosKind,
+    pub pmos_kind: MosKind,
     /// The width of the NMOS.
     pub nmos_w: i64,
     /// The width of the PMOS.
@@ -108,8 +110,8 @@ impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Invert
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
-        let nmos_params = MosTileParams::new(TileKind::N, self.0.nmos_w);
-        let pmos_params = MosTileParams::new(TileKind::P, self.0.pmos_w);
+        let nmos_params = MosTileParams::new(self.0.nmos_kind, TileKind::N, self.0.nmos_w);
+        let pmos_params = MosTileParams::new(self.0.pmos_kind, TileKind::P, self.0.pmos_w);
 
         let mut nmos = cell
             .generate_connected(

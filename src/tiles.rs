@@ -3,6 +3,17 @@
 use serde::{Deserialize, Serialize};
 use substrate::io::{InOut, Io, Signal};
 
+/// MOS device kind.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum MosKind {
+    /// Nominal Vt.
+    Nom,
+    /// Low Vt.
+    Lvt,
+    /// Ultra low Vt.
+    Ulvt,
+}
+
 /// The IO of a tap.
 #[derive(Default, Debug, Clone, Copy, Io)]
 pub struct TapIo {
@@ -22,16 +33,22 @@ pub enum TileKind {
 /// MOS tile parameters.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct MosTileParams {
-    /// The kind of MOS device.
-    pub kind: TileKind,
+    /// The flavor of MOS device.
+    pub mos_kind: MosKind,
+    /// Whether MOS is n-channel or p-channel.
+    pub tile_kind: TileKind,
     /// The MOS device width.
     pub w: i64,
 }
 
 impl MosTileParams {
     /// Creates a new [`MosTileParams`].
-    pub fn new(kind: TileKind, w: i64) -> Self {
-        Self { kind, w }
+    pub fn new(mos_kind: MosKind, tile_kind: TileKind, w: i64) -> Self {
+        Self {
+            mos_kind,
+            tile_kind,
+            w,
+        }
     }
 }
 
