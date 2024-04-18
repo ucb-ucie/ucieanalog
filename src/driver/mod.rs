@@ -3,8 +3,8 @@
 pub mod tb;
 
 use crate::tiles::{
-    MosTileParams, ResistorConn, ResistorIo, ResistorIoSchematic, ResistorTileParams, TapIo,
-    TapIoSchematic, TapTileParams, TileKind,
+    MosKind, MosTileParams, ResistorConn, ResistorIo, ResistorIoSchematic, ResistorTileParams,
+    TapIo, TapIoSchematic, TapTileParams, TileKind,
 };
 use atoll::abs::TrackCoord;
 use atoll::grid::AtollLayer;
@@ -1435,18 +1435,22 @@ impl<PDK: Pdk + Schema + Sized, T: VerticalDriverImpl<PDK> + Any> Tile<PDK>
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
-        let nor_pu_en_params = MosTileParams::new(TileKind::P, self.0.nor_pu_en_w);
-        let nor_pu_data_params = MosTileParams::new(TileKind::P, self.0.nor_pu_data_w);
-        let nor_pd_en_params = MosTileParams::new(TileKind::N, self.0.nor_pd_en_w);
-        let nor_pd_data_params = MosTileParams::new(TileKind::N, self.0.nor_pd_data_w);
-        let driver_pd_params = MosTileParams::new(TileKind::N, self.0.driver_pd_w);
+        let nor_pu_en_params = MosTileParams::new(MosKind::Nom, TileKind::P, self.0.nor_pu_en_w);
+        let nor_pu_data_params =
+            MosTileParams::new(MosKind::Nom, TileKind::P, self.0.nor_pu_data_w);
+        let nor_pd_en_params = MosTileParams::new(MosKind::Nom, TileKind::N, self.0.nor_pd_en_w);
+        let nor_pd_data_params =
+            MosTileParams::new(MosKind::Nom, TileKind::N, self.0.nor_pd_data_w);
+        let driver_pd_params = MosTileParams::new(MosKind::Nom, TileKind::N, self.0.driver_pd_w);
         let pd_res_params = ResistorTileParams::new(self.0.pd_res_l);
         let pu_res_params = ResistorTileParams::new(self.0.pu_res_l);
-        let driver_pu_params = MosTileParams::new(TileKind::P, self.0.driver_pu_w);
-        let nand_pu_en_params = MosTileParams::new(TileKind::P, self.0.nand_pu_en_w);
-        let nand_pu_data_params = MosTileParams::new(TileKind::P, self.0.nand_pu_data_w);
-        let nand_pd_en_params = MosTileParams::new(TileKind::N, self.0.nand_pd_en_w);
-        let nand_pd_data_params = MosTileParams::new(TileKind::N, self.0.nand_pd_data_w);
+        let driver_pu_params = MosTileParams::new(MosKind::Nom, TileKind::P, self.0.driver_pu_w);
+        let nand_pu_en_params = MosTileParams::new(MosKind::Nom, TileKind::P, self.0.nand_pu_en_w);
+        let nand_pu_data_params =
+            MosTileParams::new(MosKind::Nom, TileKind::P, self.0.nand_pu_data_w);
+        let nand_pd_en_params = MosTileParams::new(MosKind::Nom, TileKind::N, self.0.nand_pd_en_w);
+        let nand_pd_data_params =
+            MosTileParams::new(MosKind::Nom, TileKind::N, self.0.nand_pd_data_w);
 
         let nor_x = cell.signal("nor_x", Signal::new());
         let nand_x = cell.signal("nand_x", Signal::new());

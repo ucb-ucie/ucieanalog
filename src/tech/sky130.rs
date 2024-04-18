@@ -24,7 +24,7 @@ impl StrongArmImpl<Sky130Pdk> for Sky130Ucie {
     type ViaMaker = Sky130ViaMaker;
 
     fn mos(params: MosTileParams) -> Self::MosTile {
-        TwoFingerMosTile::new(params.w, MosLength::L150, params.kind)
+        TwoFingerMosTile::new(params.w, MosLength::L150, params.tile_kind)
     }
     fn tap(params: TapTileParams) -> Self::TapTile {
         TapTile::new(params)
@@ -40,7 +40,7 @@ impl InverterImpl<Sky130Pdk> for Sky130Ucie {
     type ViaMaker = Sky130ViaMaker;
 
     fn mos(params: MosTileParams) -> Self::MosTile {
-        TwoFingerMosTile::new(params.w, MosLength::L150, params.kind)
+        TwoFingerMosTile::new(params.w, MosLength::L150, params.tile_kind)
     }
     fn tap(params: TapTileParams) -> Self::TapTile {
         TapTile::new(params)
@@ -211,6 +211,7 @@ mod tests {
     use crate::strongarm::tb::{ComparatorDecision, StrongArmTranTb};
     use crate::strongarm::{InputKind, StrongArm, StrongArmParams, StrongArmWithOutputBuffers};
     use crate::tech::sky130::Sky130Ucie;
+    use crate::tiles::MosKind;
     use atoll::TileWrapper;
     use rust_decimal::Decimal;
     use rust_decimal_macros::dec;
@@ -227,6 +228,8 @@ mod tests {
         let work_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/build/strongarm_sim");
         let input_kind = InputKind::P;
         let dut = TileWrapper::new(StrongArm::<Sky130Ucie>::new(StrongArmParams {
+            nmos_kind: MosKind::Nom,
+            pmos_kind: MosKind::Nom,
             half_tail_w: 1_000,
             input_pair_w: 1_000,
             inv_input_w: 1_000,
@@ -294,6 +297,8 @@ mod tests {
         let ctx = sky130_ctx();
 
         let block = TileWrapper::new(StrongArm::<Sky130Ucie>::new(StrongArmParams {
+            nmos_kind: MosKind::Nom,
+            pmos_kind: MosKind::Nom,
             half_tail_w: 1_000,
             input_pair_w: 1_000,
             inv_input_w: 1_000,
@@ -328,6 +333,8 @@ mod tests {
         let ctx = sky130_ctx();
 
         let block = TileWrapper::new(Buffer::<Sky130Ucie>::new(InverterParams {
+            nmos_kind: MosKind::Nom,
+            pmos_kind: MosKind::Nom,
             nmos_w: 1_000,
             pmos_w: 1_000,
         }));
@@ -362,6 +369,8 @@ mod tests {
 
         let block = TileWrapper::new(StrongArmWithOutputBuffers::<Sky130Ucie>::new(
             StrongArmParams {
+                nmos_kind: MosKind::Nom,
+                pmos_kind: MosKind::Nom,
                 half_tail_w: 1_000,
                 input_pair_w: 1_000,
                 inv_input_w: 1_000,
@@ -370,6 +379,8 @@ mod tests {
                 input_kind: InputKind::P,
             },
             InverterParams {
+                nmos_kind: MosKind::Nom,
+                pmos_kind: MosKind::Nom,
                 nmos_w: 1_000,
                 pmos_w: 1_000,
             },
