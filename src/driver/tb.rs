@@ -19,6 +19,7 @@ use substrate::block::Block;
 use substrate::io::schematic::{HardwareType, Node};
 use substrate::io::{Array, FlatLen, Signal, TestbenchIo, TwoTerminalIoSchematic};
 use substrate::pdk::corner::Pvt;
+use substrate::schematic::primitives::Resistor;
 use substrate::schematic::schema::Schema;
 use substrate::schematic::{Cell, CellBuilder, ExportsNestedData, NestedData, Schematic};
 use substrate::scir::schema::FromSchema;
@@ -133,27 +134,34 @@ where
 
         let dut = cell.sub_builder::<PDK>().instantiate(self.dut.clone());
         let pu_ctl = cell.signal("pu_ctl", Array::new(dut.io().pu_ctl.len(), Signal));
-        let pd_ctl = cell.signal("pd_ctl", Array::new(dut.io().pu_ctl.len(), Signal));
+        let pd_ctlb = cell.signal("pd_ctlb", Array::new(dut.io().pu_ctl.len(), Signal));
 
         assert_eq!(pu_ctl.len(), self.pu_mask.len());
-        assert_eq!(pd_ctl.len(), self.pd_mask.len());
+        assert_eq!(pd_ctlb.len(), self.pd_mask.len());
 
         for i in 0..pu_ctl.len() {
             cell.connect(&dut.io().pu_ctl[i], &pu_ctl[i]);
-            if self.pu_mask[i] {
-                cell.connect(pu_ctl[i], vdd);
-            } else {
-                cell.connect(pu_ctl[i], io.vss);
-            }
+            let supply = if self.pu_mask[i] { vdd } else { io.vss };
+            cell.instantiate_connected(
+                Resistor::new(dec!(100)),
+                TwoTerminalIoSchematic {
+                    p: pu_ctl[i],
+                    n: supply,
+                },
+            );
         }
-        for i in 0..pd_ctl.len() {
-            cell.connect(&dut.io().pd_ctl[i], &pd_ctl[i]);
-            if self.pd_mask[i] {
-                cell.connect(pd_ctl[i], vdd);
-            } else {
-                cell.connect(pd_ctl[i], io.vss);
-            }
+        for i in 0..pd_ctlb.len() {
+            cell.connect(&dut.io().pd_ctlb[i], &pd_ctlb[i]);
+            let supply = if self.pd_mask[i] { io.vss } else { vdd };
+            cell.instantiate_connected(
+                Resistor::new(dec!(100)),
+                TwoTerminalIoSchematic {
+                    p: pd_ctlb[i],
+                    n: supply,
+                },
+            );
         }
+
         cell.connect(dut.io().vdd, vdd);
         cell.connect(dut.io().vss, io.vss);
         cell.connect(dut.io().din, vin);

@@ -271,7 +271,7 @@ mod tests {
                     }
                 }
 
-                let tb = StrongArmTranTb::new(dut.clone(), vinp, vinn, input_kind.is_p(), pvt);
+                let tb = StrongArmTranTb::new(dut, vinp, vinn, input_kind.is_p(), pvt);
                 let decision = ctx
                     .simulate(tb, work_dir)
                     .expect("failed to run simulation")
@@ -308,7 +308,7 @@ mod tests {
         }));
 
         let scir = ctx
-            .export_scir(block.clone())
+            .export_scir(block)
             .unwrap()
             .scir
             .convert_schema::<Sky130CommercialSchema>()
@@ -340,7 +340,7 @@ mod tests {
         }));
 
         let scir = ctx
-            .export_scir(block.clone())
+            .export_scir(block)
             .unwrap()
             .scir
             .convert_schema::<Sky130CommercialSchema>()
@@ -387,7 +387,7 @@ mod tests {
         ));
 
         let scir = ctx
-            .export_scir(block.clone())
+            .export_scir(block)
             .unwrap()
             .scir
             .convert_schema::<Sky130CommercialSchema>()
