@@ -1,6 +1,6 @@
 //! Buffer layout generators.
 
-use crate::tiles::{MosTileParams, TapIo, TapTileParams, TileKind};
+use crate::tiles::{MosKind, MosTileParams, TapIo, TapTileParams, TileKind};
 use atoll::route::{GreedyRouter, ViaMaker};
 use atoll::{IoBuilder, Orientation, Tile, TileBuilder};
 use serde::{Deserialize, Serialize};
@@ -32,6 +32,10 @@ pub struct BufferIo {
 /// The parameters of the [`Inverter`] layout generator.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct InverterParams {
+    /// The NMOS device flavor.
+    pub nmos_kind: MosKind,
+    /// The PMOS device flavor.
+    pub pmos_kind: MosKind,
     /// The width of the NMOS.
     pub nmos_w: i64,
     /// The width of the PMOS.
@@ -108,8 +112,8 @@ impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Invert
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
-        let nmos_params = MosTileParams::new(TileKind::N, self.0.nmos_w);
-        let pmos_params = MosTileParams::new(TileKind::P, self.0.pmos_w);
+        let nmos_params = MosTileParams::new(self.0.nmos_kind, TileKind::N, self.0.nmos_w);
+        let pmos_params = MosTileParams::new(self.0.pmos_kind, TileKind::P, self.0.pmos_w);
 
         let mut nmos = cell
             .generate_connected(
@@ -154,7 +158,7 @@ impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Invert
         let ntap = cell.draw(ntap)?;
 
         cell.set_top_layer(1);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(T::via_maker());
 
         io.layout.din.merge(nmos.layout.io().g);
@@ -246,7 +250,7 @@ impl<PDK: Pdk + Schema + Sized, T: InverterImpl<PDK> + Any> Tile<PDK> for Buffer
         let inv2 = cell.draw(inv2)?;
 
         cell.set_top_layer(1);
-        cell.set_router(GreedyRouter);
+        cell.set_router(GreedyRouter::new());
         cell.set_via_maker(T::via_maker());
 
         io.layout.vdd.merge(inv1.layout.io().vdd);

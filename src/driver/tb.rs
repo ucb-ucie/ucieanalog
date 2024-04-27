@@ -23,6 +23,7 @@ use substrate::io::schematic::{HardwareType, Node};
 use substrate::io::{Array, FlatLen, Signal, TestbenchIo, TwoTerminalIoSchematic};
 use substrate::pdk::corner::Pvt;
 use substrate::pdk::Pdk;
+use substrate::schematic::primitives::Resistor;
 use substrate::schematic::schema::Schema;
 use substrate::schematic::{Cell, CellBuilder, ExportsNestedData, NestedData, Schematic};
 use substrate::scir::schema::FromSchema;
@@ -137,27 +138,34 @@ where
 
         let dut = cell.sub_builder::<PDK>().instantiate(self.dut.clone());
         let pu_ctl = cell.signal("pu_ctl", Array::new(dut.io().pu_ctl.len(), Signal));
-        let pd_ctl = cell.signal("pd_ctl", Array::new(dut.io().pu_ctl.len(), Signal));
+        let pd_ctlb = cell.signal("pd_ctlb", Array::new(dut.io().pu_ctl.len(), Signal));
 
         assert_eq!(pu_ctl.len(), self.pu_mask.len());
-        assert_eq!(pd_ctl.len(), self.pd_mask.len());
+        assert_eq!(pd_ctlb.len(), self.pd_mask.len());
 
         for i in 0..pu_ctl.len() {
             cell.connect(&dut.io().pu_ctl[i], &pu_ctl[i]);
-            if self.pu_mask[i] {
-                cell.connect(pu_ctl[i], vdd);
-            } else {
-                cell.connect(pu_ctl[i], io.vss);
-            }
+            let supply = if self.pu_mask[i] { vdd } else { io.vss };
+            cell.instantiate_connected(
+                Resistor::new(dec!(100)),
+                TwoTerminalIoSchematic {
+                    p: pu_ctl[i],
+                    n: supply,
+                },
+            );
         }
-        for i in 0..pd_ctl.len() {
-            cell.connect(&dut.io().pd_ctl[i], &pd_ctl[i]);
-            if self.pd_mask[i] {
-                cell.connect(pd_ctl[i], vdd);
-            } else {
-                cell.connect(pd_ctl[i], io.vss);
-            }
+        for i in 0..pd_ctlb.len() {
+            cell.connect(&dut.io().pd_ctlb[i], &pd_ctlb[i]);
+            let supply = if self.pd_mask[i] { io.vss } else { vdd };
+            cell.instantiate_connected(
+                Resistor::new(dec!(100)),
+                TwoTerminalIoSchematic {
+                    p: pd_ctlb[i],
+                    n: supply,
+                },
+            );
         }
+
         cell.connect(dut.io().vdd, vdd);
         cell.connect(dut.io().vss, io.vss);
         cell.connect(dut.io().din, vin);
@@ -233,14 +241,21 @@ where
     }
 }
 
+/// Driver simulation parameters.
 pub struct DriverSimParams<T, C> {
+    /// The driver to simulate.
     pub driver: T,
+    /// The PVT corner.
     pub pvt: Pvt<C>,
+    /// Start frequency.
     pub fstart: Decimal,
+    /// Stop frequency.
     pub fstop: Decimal,
+    /// Number of frequency sweep points.
     pub sweep_points: usize,
 }
 
+/// A set of driver simulation results.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriverAcSims {
     /// Pull-up resistances.
@@ -261,6 +276,7 @@ pub struct DriverAcSims {
     pub pd_codes: Vec<usize>,
 }
 
+/// Run the given set of driver simulations.
 pub fn simulate_driver<T, PDK, C>(
     params: DriverSimParams<T, C>,
     ctx: PdkContext<PDK>,
@@ -275,7 +291,7 @@ where
 {
     let x = ctx.generate_schematic(params.driver.clone());
     let n_pu = x.cell().io().pu_ctl.num_elems();
-    let n_pd = x.cell().io().pd_ctl.num_elems();
+    let n_pd = x.cell().io().pd_ctlb.num_elems();
 
     assert!(params.sweep_points >= 2);
     let pu_codes = (1..=n_pu).collect();
@@ -365,15 +381,12 @@ where
 /// 2 becomes 1100
 /// 3 becomes 1110
 /// 4 becomes 1111
-fn code_to_thermometer(mut code: usize, bits: usize) -> Vec<bool> {
+fn code_to_thermometer(code: usize, bits: usize) -> Vec<bool> {
     assert!(code <= bits);
     let mut out = Vec::with_capacity(bits);
-    for _ in 0..code {
-        out.push(true);
-    }
-    for _ in 0..(bits - code) {
-        out.push(false);
-    }
-
+    out.resize(code, true);
+    out.resize(bits, false);
+    assert_eq!(out.len(), bits);
+    
     out
 }
