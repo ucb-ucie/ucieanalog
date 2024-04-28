@@ -387,6 +387,6 @@ fn code_to_thermometer(code: usize, bits: usize) -> Vec<bool> {
     out.resize(code, true);
     out.resize(bits, false);
     assert_eq!(out.len(), bits);
-    
+
     out
 }

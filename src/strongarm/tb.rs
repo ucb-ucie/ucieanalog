@@ -248,6 +248,7 @@ where
                     stop: dec!(30e-9),
                     start: None,
                     errpreset: Some(ErrPreset::Conservative),
+                    ..Default::default()
                 },
             )
             .expect("failed to run simulation");
@@ -500,6 +501,7 @@ where
                     stop: self.params.period * Decimal::from(self.params.cycles + 2),
                     start: None,
                     errpreset: Some(ErrPreset::Conservative),
+                    ..Default::default()
                 },
             )
             .expect("failed to run simulation");
