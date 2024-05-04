@@ -162,6 +162,8 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     type ViaMaker: ViaMaker<PDK>;
     /// Height of guard ring top and bottom sides in layer 1 tracks.
     const GUARD_RING_ANNULAR_HEIGHT: i64;
+    /// Width of the bump rectangle.
+    const BUMP_RECT_WIDTH: i64;
 
     /// Creates an instance of the MOS tile.
     fn mos(kind: TileKind, nf: i64, w: i64) -> Self::MosTile;
@@ -1294,7 +1296,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             let via_maker = T::via_maker();
             let bump_rect = Rect::from_spans(
                 cell.layout.bbox_rect().hspan(),
-                Span::from_center_span(driver.layout.data().dout[0].center().y, 1080),
+                Span::from_center_span(driver.layout.data().dout[0].center().y, T::BUMP_RECT_WIDTH),
             );
             cell.layout
                 .draw(Shape::new(cell.layer_stack.layers[9].id, bump_rect))?;
