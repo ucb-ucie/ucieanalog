@@ -541,7 +541,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         }
 
         // Draw transistors.
-        let nor_pd_en = cell.draw(nor_pd_en)?;
+        let _nor_pd_en = cell.draw(nor_pd_en)?;
         let nor_pd_data = cell.draw(nor_pd_data)?;
         let _nor_pu_en = cell.draw(nor_pu_en)?;
         let nor_pu_data = cell.draw(nor_pu_data)?;
@@ -549,7 +549,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let pd_res = cell.draw(pd_res)?;
         let pu_res = cell.draw(pu_res)?;
         let driver_pu = cell.draw(driver_pu)?;
-        let nand_pd_en = cell.draw(nand_pd_en)?;
+        let _nand_pd_en = cell.draw(nand_pd_en)?;
         let nand_pd_data = cell.draw(nand_pd_data)?;
         let _nand_pu_en = cell.draw(nand_pu_en)?;
         let nand_pu_data = cell.draw(nand_pu_data)?;
