@@ -168,7 +168,9 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     const BUMP_RECT_WIDTH: i64;
 
     /// Creates an instance of the MOS tile.
-    fn mos(kind: TileKind, nf: i64, w: i64) -> Self::MosTile;
+    fn mos(kind: TileKind, max_nf: i64, w: i64) -> Self::MosTile;
+    /// Creates an instance of the MOS tile for the driver transistors.
+    fn driver_mos(kind: TileKind, max_nf: i64, w: i64) -> Self::MosTile;
     /// Creates an instance of the tied MOS tile.
     fn tied_mos(kind: TileKind, nf: i64, w: i64) -> Self::TiedMosTile;
     /// Creates an instance of the tap tile.
@@ -317,8 +319,8 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         let pd_x = cell.signal("pd_x", Signal::new());
         let pu_x = cell.signal("pu_x", Signal::new());
 
-        // Choose width per finger based on provided width parameter and number of fingers.
-        let mos = |kind, w| T::mos(kind, nf, (w - 1) / nf + 1);
+        let mos = |kind, w| T::mos(kind, nf, w);
+        let driver_mos = |kind, w| T::driver_mos(kind, nf, w);
 
         // Instantiate all transistors.
         let mut nor_pu_en = cell
@@ -362,7 +364,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             },
         );
         let mut driver_pd = cell.generate_connected(
-            mos(TileKind::N, self.0.driver_pd_w),
+            driver_mos(TileKind::N, self.0.driver_pd_w),
             MosIoSchematic {
                 d: pd_x,
                 g: pd_en,
@@ -400,7 +402,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .orient(Orientation::ReflectVert);
         let mut driver_pu = cell
             .generate_connected(
-                mos(TileKind::P, self.0.driver_pu_w),
+                driver_mos(TileKind::P, self.0.driver_pu_w),
                 MosIoSchematic {
                     d: pu_x,
                     g: pu_en,
@@ -819,7 +821,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 .expand_to_lcm_units(Rect::from_xy(pu_bbox.right(), pu_bbox.center().y));
             let dummy_pu = cell
                 .generate_connected(
-                    T::tied_mos(TileKind::P, 2, (self.0.unit.driver_pu_w - 1) / nf + 1),
+                    T::tied_mos(TileKind::P, 2, self.0.unit.driver_pu_w),
                     io.schematic.vdd,
                 )
                 .orient(Orientation::ReflectVert)
@@ -832,7 +834,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 .expand_to_lcm_units(Rect::from_xy(pd_bbox.right(), pd_bbox.center().y));
             let dummy_pd = cell
                 .generate_connected(
-                    T::tied_mos(TileKind::N, 2, (self.0.unit.driver_pd_w - 1) / nf + 1),
+                    T::tied_mos(TileKind::N, 2, self.0.unit.driver_pd_w - 1),
                     io.schematic.vss,
                 )
                 .align_rect(pd_loc, AlignMode::CenterVertical, 0)
