@@ -160,6 +160,8 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     type ResistorTile: Tile<PDK> + Block<Io = ResistorIo> + Clone;
     /// A PDK-specific via maker.
     type ViaMaker: ViaMaker<PDK>;
+    /// The `pu_ctl`/`pu_ctlb` pin layer for driver unit cells.
+    type Pin: HasPin;
     /// Height of guard ring top and bottom sides in layer 1 tracks.
     const GUARD_RING_ANNULAR_HEIGHT: i64;
     /// Width of the bump rectangle.
@@ -186,6 +188,8 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     fn guard_ring(kind: TileKind, n_device: i64, nf: i64, height: i64) -> Self::GuardRingTile;
     /// Creates a PDK-specific via maker.
     fn via_maker() -> Self::ViaMaker;
+    /// Returns the `pu_ctl`/`pu_ctlb` pin layer.
+    fn pin(layers: &PdkLayers<PDK>) -> Self::Pin;
     /// Additional layout hooks to run after the inverter layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
@@ -606,9 +610,12 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .tracks()
             .to_track_idx(bbox.left(), RoundingMode::Up);
 
-        for (i, port) in [io.schematic.pu_ctl, io.schematic.pd_ctlb]
-            .into_iter()
-            .enumerate()
+        for (i, (port, layout)) in [
+            (io.schematic.pu_ctl, &mut io.layout.pu_ctl),
+            (io.schematic.pd_ctlb, &mut io.layout.pd_ctlb),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let y_track_idx = bot_track_y + 1;
             let x_track_idx = left_track_x + 1 + i as i64;
@@ -623,12 +630,14 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 2,
                 Rect::from_point(Point::new(x_track_idx, y_track_idx)),
             );
+            layout.push(IoShape::with_layers(
+                T::pin(&cell.ctx().layers),
+                Rect::from_spans(x_track, y_track),
+            ));
         }
 
         io.layout.din.merge(nor_pd_data.layout.io().g);
         io.layout.dout.merge(pu_res.layout.io().p);
-        io.layout.pu_ctl.merge(nand_pd_en.layout.io().g);
-        io.layout.pd_ctlb.merge(nor_pd_en.layout.io().g);
         io.layout.vdd.merge(ntap_driver_top.layout.io().x);
         io.layout.vss.merge(ptap_driver_bot.layout.io().x);
 
