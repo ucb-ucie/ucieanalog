@@ -817,10 +817,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         for unit in units.iter().take(self.0.num_segments + 1) {
             // Draw dummy transistors.
             let pu_bbox = unit.layout.data().driver_pu_bbox;
-            let pu_loc = cell
-                .layer_stack
-                .slice(0..2)
-                .expand_to_lcm_units(Rect::from_xy(pu_bbox.right(), pu_bbox.center().y));
+            let pu_loc = Rect::from_xy(pu_bbox.right(), pu_bbox.center().y);
             T::draw_dummy_mos(
                 cell,
                 TileKind::P,
@@ -830,10 +827,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 Orientation::ReflectVert,
             )?;
             let pd_bbox = unit.layout.data().driver_pd_bbox;
-            let pd_loc = cell
-                .layer_stack
-                .slice(0..2)
-                .expand_to_lcm_units(Rect::from_xy(pd_bbox.right(), pd_bbox.center().y));
+            let pd_loc = Rect::from_xy(pd_bbox.right(), pd_bbox.center().y);
             T::draw_dummy_mos(
                 cell,
                 TileKind::N,
