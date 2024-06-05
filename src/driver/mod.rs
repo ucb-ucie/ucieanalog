@@ -145,11 +145,6 @@ pub struct DriverParams {
 pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     /// The MOS tile.
     type MosTile: Tile<PDK> + Block<Io = MosIo> + Clone;
-    /// The MOS tile used as dummies between pull-up/pull-down transistors
-    /// on the same row.
-    ///
-    /// All 4 ports should be tied to the same node.
-    type TiedMosTile: Tile<PDK> + Block<Io = Signal> + Clone;
     /// The tap tile.
     type TapTile: Tile<PDK> + Block<Io = TapIo> + Clone;
     /// A filler layout cell.
@@ -171,8 +166,6 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     fn mos(kind: TileKind, max_nf: i64, w: i64) -> Self::MosTile;
     /// Creates an instance of the MOS tile for the driver transistors.
     fn driver_mos(kind: TileKind, max_nf: i64, w: i64) -> Self::MosTile;
-    /// Creates an instance of the tied MOS tile.
-    fn tied_mos(kind: TileKind, nf: i64, w: i64) -> Self::TiedMosTile;
     /// Creates an instance of the tap tile.
     fn tap(kind: TileKind, nf: i64) -> Self::TapTile;
     /// The number of fingers needed for the MOS tile to match the width of the resistor tile.
@@ -192,6 +185,15 @@ pub trait HorizontalDriverImpl<PDK: Pdk + Schema> {
     fn via_maker() -> Self::ViaMaker;
     /// Returns the `pu_ctl`/`pu_ctlb` pin layer.
     fn pin(layers: &PdkLayers<PDK>) -> Self::Pin;
+    /// Draws a dummy MOS with the given position/orientation.
+    fn draw_dummy_mos(
+        cell: &mut TileBuilder<'_, PDK>,
+        kind: TileKind,
+        nf: i64,
+        w: i64,
+        loc: Point,
+        orientation: Orientation,
+    ) -> Result<()>;
     /// Additional layout hooks to run after the inverter layout is complete.
     fn post_layout_hooks(_cell: &mut TileBuilder<'_, PDK>) -> Result<()> {
         Ok(())
@@ -815,32 +817,25 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         for unit in units.iter().take(self.0.num_segments + 1) {
             // Draw dummy transistors.
             let pu_bbox = unit.layout.data().driver_pu_bbox;
-            let pu_loc = cell
-                .layer_stack
-                .slice(0..2)
-                .expand_to_lcm_units(Rect::from_xy(pu_bbox.right(), pu_bbox.center().y));
-            let dummy_pu = cell
-                .generate_connected(
-                    T::tied_mos(TileKind::P, 2, self.0.unit.driver_pu_w),
-                    io.schematic.vdd,
-                )
-                .orient(Orientation::ReflectVert)
-                .align_rect(pu_loc, AlignMode::CenterVertical, 0)
-                .align_rect(pu_loc, AlignMode::CenterHorizontal, 0);
+            let pu_loc = Rect::from_xy(pu_bbox.right(), pu_bbox.center().y);
+            T::draw_dummy_mos(
+                cell,
+                TileKind::P,
+                2,
+                self.0.unit.driver_pu_w,
+                pu_loc.center(),
+                Orientation::ReflectVert,
+            )?;
             let pd_bbox = unit.layout.data().driver_pd_bbox;
-            let pd_loc = cell
-                .layer_stack
-                .slice(0..2)
-                .expand_to_lcm_units(Rect::from_xy(pd_bbox.right(), pd_bbox.center().y));
-            let dummy_pd = cell
-                .generate_connected(
-                    T::tied_mos(TileKind::N, 2, self.0.unit.driver_pd_w - 1),
-                    io.schematic.vss,
-                )
-                .align_rect(pd_loc, AlignMode::CenterVertical, 0)
-                .align_rect(pd_loc, AlignMode::CenterHorizontal, 0);
-            let _dummy_pu = cell.draw(dummy_pu)?;
-            let _dummy_pd = cell.draw(dummy_pd)?;
+            let pd_loc = Rect::from_xy(pd_bbox.right(), pd_bbox.center().y);
+            T::draw_dummy_mos(
+                cell,
+                TileKind::N,
+                2,
+                self.0.unit.driver_pd_w,
+                pd_loc.center(),
+                Orientation::R0,
+            )?;
 
             // Draw additional taps.
             for (tap_bbox, kind, node) in unit
