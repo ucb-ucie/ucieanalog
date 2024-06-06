@@ -992,12 +992,33 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             dout.push(unit_dout.bbox_rect());
         }
 
-        // Determine strapping domains.
         let top_slice = cell.layer_stack.slice(0..8);
         let overall_bbox = top_slice.expand_to_lcm_units(cell.layout.bbox_rect());
+        let physical_overall_bbox = top_slice.lcm_to_physical_rect(overall_bbox);
+
         let virtual_layers = cell.layout.ctx.install_layers::<atoll::VirtualLayers>();
         cell.layout
-            .draw(Shape::new(virtual_layers.outline, overall_bbox))?;
+            .draw(Shape::new(virtual_layers.outline, physical_overall_bbox))?;
+
+        // Extend ctl pins to edge.
+        for i in 1..=self.0.num_segments {
+            for port in [units[i].layout.io().pu_ctl, units[i].layout.io().pd_ctlb] {
+                let pin_rect = port.primary.bbox_rect();
+                let pin_rect =
+                    pin_rect.with_vspan(pin_rect.vspan().add_point(physical_overall_bbox.bot()));
+                cell.layout
+                    .draw(Shape::new(port.primary.layer().drawing(), pin_rect))?;
+                cell.assign_grid_points(
+                    None,
+                    2,
+                    cell.layer_stack.slice(0..3).expand_to_lcm_units(pin_rect),
+                );
+            }
+        }
+
+        let top_slice = cell.layer_stack.slice(0..8);
+
+        // Determine strapping domains.
         let guard_ring_p_bbox = top_slice
             .expand_to_lcm_units(Rect::from_spans(
                 cell.layout.bbox_rect().hspan(),
