@@ -767,18 +767,18 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
     )> {
         let mut units = Vec::new();
         // Instantiate driver units.
-        for i in 0..self.0.num_segments + 2 {
+        for i in 0..self.0.num_segments {
             let mut unit = cell.generate_connected(
                 HorizontalDriverUnit::<T>::new(self.0.unit),
                 DriverUnitIoSchematic {
                     din: io.schematic.din,
                     dout: io.schematic.dout,
-                    pu_ctl: if i == 0 || i == self.0.num_segments + 1 {
+                    pu_ctl: if i == 0 || i == self.0.num_segments - 1 {
                         io.schematic.vss
                     } else {
                         io.schematic.pu_ctl[i - 1]
                     },
-                    pd_ctlb: if i == 0 || i == self.0.num_segments + 1 {
+                    pd_ctlb: if i == 0 || i == self.0.num_segments - 1 {
                         io.schematic.vdd
                     } else {
                         io.schematic.pd_ctlb[i - 1]
@@ -802,10 +802,8 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 let unit = cell.draw(unit)?;
                 io.layout.din.merge(unit.layout.io().din);
                 io.layout.dout.merge(unit.layout.io().dout);
-                if i > 0 && i < self.0.num_segments + 1 {
-                    io.layout.pu_ctl[i - 1].merge(unit.layout.io().pu_ctl);
-                    io.layout.pd_ctlb[i - 1].merge(unit.layout.io().pd_ctlb);
-                }
+                io.layout.pu_ctl[i].merge(unit.layout.io().pu_ctl);
+                io.layout.pd_ctlb[i].merge(unit.layout.io().pd_ctlb);
                 io.layout.vdd.merge(unit.layout.io().vdd);
                 io.layout.vss.merge(unit.layout.io().vss);
                 Ok(unit)
@@ -814,7 +812,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
 
         // Fill in extra dummies and taps for continuous diffusion for pull-up/pull-down transistors.
         let nf = T::nf(self.0.unit.res_legs, self.0.unit.res_w);
-        for unit in units.iter().take(self.0.num_segments + 1) {
+        for unit in units.iter().take(self.0.num_segments - 1) {
             // Draw dummy transistors.
             let pu_bbox = unit.layout.data().driver_pu_bbox;
             let pu_loc = Rect::from_xy(pu_bbox.right(), pu_bbox.center().y);
@@ -870,7 +868,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         for sign in [Sign::Neg, Sign::Pos] {
             let unit = &units[match sign {
                 Sign::Neg => 0,
-                Sign::Pos => self.0.num_segments + 1,
+                Sign::Pos => self.0.num_segments - 1,
             }];
             for (bbox, kind) in unit
                 .layout
@@ -911,12 +909,12 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .layout
             .data()
             .driver_pu_bbox
-            .union(units[self.0.num_segments + 1].layout.data().driver_pu_bbox);
+            .union(units[self.0.num_segments - 1].layout.data().driver_pu_bbox);
         let pd_bbox = units[0]
             .layout
             .data()
             .driver_pd_bbox
-            .union(units[self.0.num_segments + 1].layout.data().driver_pd_bbox);
+            .union(units[self.0.num_segments - 1].layout.data().driver_pd_bbox);
 
         // Draw pull-up and pull-down guard rings.
         let mut guard_rings = Vec::new();
@@ -929,7 +927,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 .generate_connected(
                     T::guard_ring(
                         kind,
-                        (self.0.num_segments + 2) as i64,
+                        self.0.num_segments as i64,
                         nf,
                         bbox.height() / cell.layer_stack.layer(1).pitch(),
                     ),
@@ -1276,7 +1274,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
         <Self as ExportsNestedData>::NestedData,
         <Self as ExportsLayoutData>::LayoutData,
     )> {
-        let mut layer8_vias = vec![Vec::new(); self.0.num_segments + 2];
+        let mut layer8_vias = vec![Vec::new(); self.0.num_segments];
         let mut prev_bounds: Option<Rect> = None;
         // Instantiate and draw banks.
         for i in 0..self.0.banks {
