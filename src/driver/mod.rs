@@ -774,7 +774,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                     din: io.schematic.din,
                     dout: io.schematic.dout,
                     pu_ctl: io.schematic.pu_ctl[i],
-                    pd_ctlb: io.schematic.pd_ctlb[i - 1],
+                    pd_ctlb: io.schematic.pd_ctlb[i],
                     vdd: io.schematic.vdd,
                     vss: io.schematic.vss,
                 },
