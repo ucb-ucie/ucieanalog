@@ -773,16 +773,8 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
                 DriverUnitIoSchematic {
                     din: io.schematic.din,
                     dout: io.schematic.dout,
-                    pu_ctl: if i == 0 || i == self.0.num_segments - 1 {
-                        io.schematic.vss
-                    } else {
-                        io.schematic.pu_ctl[i - 1]
-                    },
-                    pd_ctlb: if i == 0 || i == self.0.num_segments - 1 {
-                        io.schematic.vdd
-                    } else {
-                        io.schematic.pd_ctlb[i - 1]
-                    },
+                    pu_ctl: io.schematic.pu_ctl[i],
+                    pd_ctlb: io.schematic.pd_ctlb[i - 1],
                     vdd: io.schematic.vdd,
                     vss: io.schematic.vss,
                 },
@@ -999,7 +991,7 @@ impl<PDK: Pdk + Schema + Sized, T: HorizontalDriverImpl<PDK> + Any> Tile<PDK>
             .draw(Shape::new(virtual_layers.outline, physical_overall_bbox))?;
 
         // Extend ctl pins to edge.
-        for i in 1..=self.0.num_segments {
+        for i in 0..self.0.num_segments {
             for port in [units[i].layout.io().pu_ctl, units[i].layout.io().pd_ctlb] {
                 let pin_rect = port.primary.bbox_rect();
                 let pin_rect =
